@@ -4,11 +4,12 @@ A sophisticated web application for automatically detecting and annotating form 
 
 ## Live Demo
 
-- **Production**: html-annotator-production.up.railway.app
+- **Production**: [html-annotator-production.up.railway.app](https://html-annotator-production.up.railway.app)
 
 ## Features
 
 ### 🎯 Core Functionality
+
 - **Multi-file Upload**: Process multiple HTML email templates simultaneously
 - **Automatic Detection**:
   - Form fields (input, textarea, select, button elements)
@@ -24,10 +25,11 @@ A sophisticated web application for automatically detecting and annotating form 
 - **Selective Download**: Choose which files to include in the final ZIP archive
 
 ### ✨ Advanced Features
+
 - Visual annotation overlays in preview
 - Color-coded annotations (blue for form fields, red for hyperlinks)
 - Zoom controls for HTML preview
-- Session-based file management
+- **Redis-based session management** for reliable multi-instance deployment
 - Professional UI with drag-and-drop support
 
 ## Quick Start
@@ -37,226 +39,166 @@ A sophisticated web application for automatically detecting and annotating form 
 1. **Clone the repository**:
    ```bash
    git clone https://github.com/NinoMandelaB/html-annotator.git
-   cd pdf_annotator
+   cd html-annotator
    ```
 
-2. **Install dependencies**:
+2. **Install Redis** (for session storage):
+   
+   **macOS:**
+   ```bash
+   brew install redis
+   brew services start redis
+   ```
+   
+   **Ubuntu/Debian:**
+   ```bash
+   sudo apt-get install redis-server
+   sudo systemctl start redis
+   ```
+   
+   **Windows:**
+   - Download from [Redis Windows](https://github.com/microsoftarchive/redis/releases)
+   - Or use WSL2 with Ubuntu installation
+
+3. **Install Python dependencies**:
    ```bash
    pip install -r requirements.txt
    ```
 
-3. **Run the application**:
+4. **Run the application**:
    ```bash
    python app.py
    ```
 
-4. **Open your browser**:
+5. **Open your browser**:
    ```
    http://localhost:5000
    ```
 
 ### Railway Deployment
 
-1. **Push to GitHub**:
+1. **Add Redis to your Railway project**:
+   - Go to your Railway dashboard
+   - Click "+ New" → "Database" → "Add Redis"
+   - Railway automatically creates the `REDIS_URL` environment variable
+
+2. **Push to GitHub**:
    ```bash
    git add .
-   git commit -m "Update to HTML annotation app"
+   git commit -m "Deploy with Redis session support"
    git push origin main
    ```
 
-2. **Railway Configuration**:
-   - Railway will automatically detect your Flask app
-   - Environment variables are set automatically
-   - The app uses the PORT environment variable
+3. **Railway Configuration**:
+   - Railway automatically detects your Flask app
+   - Redis connection is established via `REDIS_URL` environment variable
+   - The app uses the `PORT` environment variable for web binding
+   - Sessions persist across container restarts using Redis
 
-3. **Deploy**:
-   - Railway will deploy automatically on push
+4. **Deploy**:
+   - Railway deploys automatically on push
    - Your app will be available at: `https://your-app.up.railway.app`
+
+## Architecture
+
+### Session Management
+
+The application uses **Redis for distributed session storage**, which provides:
+
+- ✅ **Persistent sessions** across container restarts
+- ✅ **Horizontal scalability** with multiple app instances
+- ✅ **Fast in-memory access** for session data
+- ✅ **Automatic expiration** (2-hour session lifetime)
+- ✅ **Production-ready** for cloud deployments
+
+Session data (uploaded files, annotations) is stored in Redis instead of filesystem, making the app compatible with ephemeral container environments like Railway.
 
 ## Project Structure
 
 ```
-pdf_annotator/
-├── app.py                      # Main Flask application
-├── html_parser.py              # HTML parsing and annotation detection
-├── pdf_generator.py            # HTML to PDF conversion
-├── requirements.txt            # Python dependencies
+html-annotator/
+├── app.py                  # Main Flask application with Redis session config
+├── html_parser.py          # HTML parsing and annotation detection
+├── pdf_generator.py        # HTML to PDF conversion
+├── requirements.txt        # Python dependencies (includes Redis)
 ├── templates/
-│   ├── index.html              # Upload page
-│   └── editor.html             # Annotation editor
+│   ├── index.html         # Upload page
+│   └── editor.html        # Annotation editor
 ├── static/
 │   ├── css/
-│   │   └── editor.css          # Editor styling
+│   │   └── editor.css     # Editor styling
 │   └── js/
-│       └── editor.js           # Editor JavaScript logic
-└── README.md                   # This file
+│       └── editor.js      # Editor JavaScript logic
+└── README.md              # This file
 ```
-
-## How It Works
-
-### 1. Upload HTML Files
-- Drag and drop or browse to select one or more HTML email template files
-- The app validates that all files are HTML format (.html or .htm)
-
-### 2. Automatic Detection
-The app parses each HTML file and automatically detects:
-
-**Form Fields:**
-- Input elements (text, email, password, number, date, etc.)
-- Textarea elements
-- Select dropdowns
-- Buttons and submit inputs
-
-**Hyperlinks:**
-- All `<a>` tags with href attributes
-- Email links (mailto:)
-- Full URL extraction
-
-### 3. Interactive Editor
-The editor provides three main areas:
-
-**Left Sidebar - File List:**
-- Shows all uploaded files
-- Displays annotation count per file
-- Checkbox to select files for PDF export
-- Click to switch between files
-
-**Center - HTML Preview:**
-- Live preview of your HTML template
-- Visual highlights on detected elements
-- Click-to-add annotation mode
-- Zoom controls for better visibility
-
-**Right Sidebar - Annotation List:**
-- Lists all detected annotations
-- Drag-and-drop to reorder
-- Edit button to modify annotation details
-- Delete button to remove annotations
-- Color-coded by type (blue=form, red=link)
-
-### 4. Edit Annotations
-For each annotation, you can:
-- **Edit Label**: Change the display name
-- **Edit URL**: Modify hyperlink destinations
-- **Edit Field Name**: Change form field identifiers
-- **Add New**: Manually add annotations by clicking elements
-- **Delete**: Remove false positives or unwanted annotations
-- **Reorder**: Drag annotations to change their order
-
-### 5. Generate PDFs
-- Select which files to include (checkboxes in file list)
-- Click "Generate PDFs" button
-- The app creates annotated PDFs with:
-  - Red boxes around detected elements
-  - Numbered badges on each element
-  - Margin area with detailed annotation information
-  - Arrows connecting elements to their descriptions
-- Downloads all selected files as a ZIP archive
-
-## API Endpoints
-
-### Public Routes
-- `GET /` - Upload page
-- `POST /upload` - Handle file upload and process annotations
-- `GET /editor` - Annotation editor interface
-
-### API Routes
-- `GET /api/get_file/<file_id>` - Get file HTML and annotations
-- `POST /api/update_annotations` - Update annotations for a file
-- `POST /api/add_annotation` - Add a new annotation
-- `POST /api/delete_annotation` - Delete an annotation
-- `POST /generate_pdfs` - Generate and download PDFs
-- `POST /clear_session` - Clear session and start over
-
-## Configuration
-
-### Environment Variables
-```bash
-SECRET_KEY=your_secret_key_here  # Flask secret key for sessions
-PORT=5000                         # Port to run the application
-```
-
-### File Size Limits
-- Maximum file size: 16MB per file
-- Unlimited number of files per upload
 
 ## Dependencies
 
 - **Flask 2.3.2**: Web framework
+- **Flask-Session 0.6.0**: Server-side session management
+- **Redis 5.0.1**: In-memory data store for sessions
 - **BeautifulSoup4 4.12.2**: HTML parsing
-- **lxml 4.9.3**: XML/HTML parser backend
-- **WeasyPrint 60.1**: HTML to PDF conversion
-- **Pillow 10.1.0**: Image processing (required by WeasyPrint)
+- **lxml 5.3.0**: XML/HTML parser backend
+- **pdfkit 1.0.0**: HTML to PDF conversion
 - **Werkzeug 2.3.6**: WSGI utilities
 
-## Browser Support
+## Configuration
 
-- Chrome/Edge (recommended)
-- Firefox
-- Safari
-- Modern browsers with ES6+ support
+### Environment Variables
+
+```bash
+SECRET_KEY=your_secret_key_here      # Flask secret key for sessions
+PORT=5000                            # Port to run the application
+REDIS_URL=redis://localhost:6379     # Redis connection URL (auto-set on Railway)
+```
+
+### Session Configuration
+
+The app is configured with secure session settings:
+- **Session Type**: Redis-backed
+- **Session Lifetime**: 2 hours
+- **Cookie Security**: HTTPS-only (in production)
+- **Cookie HttpOnly**: Yes
+- **Cookie SameSite**: Lax
 
 ## Troubleshooting
 
-### WeasyPrint Installation Issues
+### Redis Connection Issues
 
-If you encounter issues installing WeasyPrint:
-
-**On macOS:**
+**Local Development:**
 ```bash
-brew install python cairo pango gdk-pixbuf libffi
+# Check if Redis is running
+redis-cli ping
+# Should return: PONG
+
+# Start Redis if not running
+# macOS: brew services start redis
+# Linux: sudo systemctl start redis
 ```
 
-**On Ubuntu/Debian:**
-```bash
-sudo apt-get install build-essential python3-dev python3-pip python3-setuptools python3-wheel python3-cffi libcairo2 libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf2.0-0 libffi-dev shared-mime-info
-```
+**Railway Deployment:**
+- Ensure Redis service is added to your Railway project
+- Check that `REDIS_URL` environment variable is set
+- View Railway logs for connection errors
 
-**On Windows:**
-- Download and install GTK3 runtime from https://github.com/tschoonj/GTK-for-Windows-Runtime-Environment-Installer
-- Restart your terminal after installation
+### Session Not Persisting
 
-### Railway Deployment
-
-WeasyPrint works on Railway with the default Python buildpack. If you encounter issues:
-- Ensure all dependencies in requirements.txt are present
-- Check Railway logs for specific error messages
-- The app automatically uses the PORT environment variable
-
-## Development
-
-### Local Development with Hot Reload
-```bash
-export FLASK_ENV=development
-python app.py
-```
-
-### Testing
-Upload sample HTML email templates to test:
-- Contact forms
-- Newsletter templates
-- Transactional emails
-- Marketing emails
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## License
-
-This project is open source and available under the MIT License.
-
-## Support
-
-For issues, questions, or contributions, please open an issue on GitHub.
+If sessions are lost between requests:
+1. Verify Redis is running and accessible
+2. Check `REDIS_URL` environment variable is correct
+3. Ensure Flask-Session is properly initialized
+4. Check Railway logs for Redis connection errors
 
 ## Changelog
 
-### Version 2.0.0 (Current)
+### Version 2.1.0 (Current)
+- ✨ Switched to Redis-based session storage for production reliability
+- ✨ Added support for horizontal scaling with multiple app instances
+- ✨ Implemented automatic session expiration (2-hour TTL)
+- 🐛 Fixed session persistence issues on Railway deployment
+- 📝 Updated documentation with Redis setup instructions
+
+### Version 2.0.0
 - Complete rewrite from PDF to HTML processing
 - Added interactive annotation editor
 - Implemented drag-and-drop annotation management
@@ -266,21 +208,38 @@ For issues, questions, or contributions, please open an issue on GitHub.
 - Enhanced annotation detection algorithm
 - PDF export with margin notes (original style preserved)
 
-### Version 1.0.0 (Previous)
+### Version 1.0.0
 - PDF link annotator with automatic URL detection
 - Red box annotations with margin text
+
+## Technical Details
+
+### Why Redis for Sessions?
+
+Traditional filesystem-based sessions don't work on cloud platforms with ephemeral storage (like Railway). Redis solves this by:
+
+1. **Persistence**: Data survives container restarts
+2. **Speed**: In-memory storage provides microsecond latency
+3. **Scalability**: Multiple app instances can share session data
+4. **TTL Support**: Automatic cleanup of expired sessions
+5. **Production-Ready**: Used by major companies for session management
+
+### Session Data Flow
+
+```
+User uploads files → Flask processes → Stores in Redis
+                                            ↓
+                                    Session ID in cookie
+                                            ↓
+User navigates to editor → Flask reads session ID → Retrieves data from Redis
+```
+
+All session management is transparent to the application code - Flask-Session handles the Redis interaction automatically.
+
+## License
+
+This project is open source and available under the MIT License.
 
 ## Credits
 
 Developed by [NinoMandelaB](https://github.com/NinoMandelaB)
-
-## Screenshots
-
-### Upload Page
-Modern, gradient interface with drag-and-drop file upload support.
-
-### Editor Interface
-Three-panel layout with file list, HTML preview, and annotation management.
-
-### PDF Output
-Annotated PDFs with numbered elements and margin descriptions, similar to the original PDF annotator style.
