@@ -7,7 +7,7 @@ import io
 import json
 import uuid
 from werkzeug.utils import secure_filename
-from html_parser import parse_html_and_detect_elements, inject_visual_annotations, wrap_template_variables
+from html_parser import parse_html_and_detect_elements, inject_visual_annotations
 from pdf_generator import convert_annotated_html_to_pdf
 from datetime import timedelta
 from flask_session import Session
@@ -35,7 +35,6 @@ Session(app)
 # Configuration
 ALLOWED_EXTENSIONS = {'html', 'htm'}
 MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB max file size
-
 
 def allowed_file(filename):
     """Check if the file has an allowed extension."""
@@ -92,25 +91,21 @@ def upload():
         
         for file in files:
             # Read HTML content
-            original_html_content = file.read().decode('utf-8', errors='ignore')
+            html_content = file.read().decode('utf-8', errors='ignore')
             original_filename = secure_filename(file.filename)
             
-            print(f"Read {len(original_html_content)} characters from {original_filename}")  # Debug
+            print(f"Read {len(html_content)} characters from {original_filename}")  # Debug
             
-            # CRITICAL FIX: Wrap template variables FIRST
-            wrapped_html_content = wrap_template_variables(original_html_content)
-            
-            # Parse wrapped HTML and detect form fields and hyperlinks
-            annotations = parse_html_and_detect_elements(wrapped_html_content)
+            # NEW: Parse HTML directly - the new parser handles everything internally
+            annotations = parse_html_and_detect_elements(html_content)
             
             print(f"Detected {len(annotations)} annotations in {original_filename}")  # Debug
             
-            # Store file data with BOTH original and wrapped HTML
+            # Store file data - only need one copy of HTML now
             file_data = {
                 "id": str(uuid.uuid4()),
                 "filename": original_filename,
-                "original_html_content": original_html_content,  # For PDF generation
-                "html_content": wrapped_html_content,  # For editor (with wrapped variables)
+                "html_content": html_content,  # Store original HTML
                 "annotations": annotations
             }
             all_files_data.append(file_data)
@@ -168,10 +163,9 @@ def get_file(file_id):
     if not file_data:
         return jsonify({"error": "File not found"}), 404
     
-    # CRITICAL FIX: Use wrapped HTML content (not original)
-    # This ensures the template variables are already wrapped in spans
+    # Inject visual annotations for preview
     annotated_html = inject_visual_annotations(
-        file_data['html_content'],  # Already has wrapped variables
+        file_data['html_content'],
         file_data['annotations']
     )
     
@@ -290,10 +284,9 @@ def generate_pdfs():
         with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED, False) as zip_file:
             for file_data in files_data:
                 if file_data['id'] in selected_file_ids:
-                    # CRITICAL FIX: Use wrapped HTML for PDF generation too
-                    # This ensures variables are visible in the PDF
+                    # Generate PDF with annotations
                     pdf_bytes = convert_annotated_html_to_pdf(
-                        file_data['html_content'],  # Use wrapped HTML
+                        file_data['html_content'],
                         file_data['annotations']
                     )
                     
