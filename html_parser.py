@@ -70,7 +70,7 @@ def parse_html_and_detect_elements(html_content):
         }
         annotations.append(annotation)
     
-    # Detect hyperlinks
+    # Detect hyperlinks (including variables in href)
     links = soup.find_all('a', href=True)
     
     for idx, link in enumerate(links):
@@ -87,6 +87,17 @@ def parse_html_and_detect_elements(html_content):
         # Determine if it's an email link
         is_email = href.startswith('mailto:')
         
+        # Check if href contains template variables
+        contains_variable = '{{' in href and '}}' in href
+        
+        # Create label with variable info if present
+        if contains_variable:
+            href_vars = re.findall(r'\{\{([a-zA-Z0-9_.]+)\}\}', href)
+            var_names = ', '.join(href_vars)
+            label = f"Link: {link_text or 'Link'} (contains variable: {var_names})"
+        else:
+            label = f"Link: {link_text or href[:50]}"
+        
         annotation = {
             "id": str(uuid.uuid4()),
             "type": "link",
@@ -95,40 +106,15 @@ def parse_html_and_detect_elements(html_content):
             "selector": selector,
             "name": link_text or href,
             "element_id": link.get('id', ''),
-            "label": f"Link: {link_text or href[:50]}",
+            "label": label,
             "text": link_text,
             "url": href,
-            "is_email": is_email
+            "is_email": is_email,
+            "contains_variable": contains_variable  # Flag for debugging
         }
         annotations.append(annotation)
     
-    # Detect variables in href attributes (as part of links)
-    for link in soup.find_all('a', href=True):
-        href = link.get('href', '')
-        
-        # Check if href contains template variables
-        if '{{' in href and '}}' in href:
-            # Extract variable names from href
-            href_vars = re.findall(r'\{\{([a-zA-Z0-9_.]+)\}\}', href)
-            
-            for var_name in href_vars:
-                # Create annotation for this variable
-                annotation = {
-                    "id": str(uuid.uuid4()),
-                    "type": "element",
-                    "element_type": "variable_in_attribute",
-                    "input_type": "url_variable",
-                    "selector": generate_css_selector(link),
-                    "name": var_name,
-                    "element_id": link.get('id', ''),
-                    "label": f"URL Variable: {var_name}",
-                    "text": f"Used in: {link.get_text(strip=True)}",
-                    "variable_name": var_name,
-                    "url": href
-                }
-                annotations.append(annotation)
-    
-    # Detect template variables (now wrapped in spans)
+    # Detect template variables (now wrapped in spans) - ONLY text content variables
     variable_spans = soup.find_all('span', {'data-template-var': True})
     
     for span in variable_spans:
@@ -161,6 +147,7 @@ def parse_html_and_detect_elements(html_content):
         annotations.append(annotation)
     
     return annotations
+
 
 
 def wrap_template_variables(html_content):
