@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTML Email Template Annotator</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 40px 20px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        
+        .main-card {
+            background: white;
+            border-radius: 20px;
+            padding: 50px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            animation: fadeIn 0.5s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        h1 {
+            color: #2c3e50;
+            font-weight: 700;
+            margin-bottom: 15px;
+            text-align: center;
+            font-size: 2.5rem;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #7f8c8d;
+            margin-bottom: 40px;
+            font-size: 1.1rem;
+        }
+        
+        .feature-list {
+            list-style: none;
+            padding: 0;
+            margin: 30px 0;
+        }
+        
+        .feature-list li {
+            padding: 12px 0;
+            color: #555;
+            font-size: 1rem;
+        }
+        
+        .feature-list li i {
+            color: #667eea;
+            margin-right: 12px;
+            width: 20px;
+        }
+        
+        .upload-area {
+            border: 3px dashed #cbd5e0;
+            border-radius: 15px;
+            padding: 60px 30px;
+            text-align: center;
+            transition: all 0.3s ease;
+            background: #f8f9fa;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .upload-area:hover {
+            border-color: #667eea;
+            background: #f0f4ff;
+            transform: translateY(-2px);
+        }
+        
+        .upload-area.dragover {
+            border-color: #667eea;
+            background: #e6eeff;
+            transform: scale(1.02);
+        }
+        
+        .upload-icon {
+            font-size: 4rem;
+            color: #667eea;
+            margin-bottom: 20px;
+        }
+        
+        .upload-text {
+            font-size: 1.3rem;
+            color: #2c3e50;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+        
+        .upload-subtext {
+            color: #7f8c8d;
+            font-size: 0.95rem;
+        }
+        
+        #files {
+            display: none;
+        }
+        
+        .file-list {
+            margin-top: 25px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            display: none;
+        }
+        
+        .file-item {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            background: white;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        
+        .file-item i {
+            color: #667eea;
+            margin-right: 12px;
+            font-size: 1.2rem;
+        }
+        
+        .file-item span {
+            flex: 1;
+            color: #2c3e50;
+            font-weight: 500;
+        }
+        
+        .file-item .remove-file {
+            color: #e74c3c;
+            cursor: pointer;
+            padding: 5px 10px;
+            transition: all 0.2s;
+        }
+        
+        .file-item .remove-file:hover {
+            color: #c0392b;
+            transform: scale(1.1);
+        }
+        
+        .btn-custom {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            border-radius: 50px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-custom:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+        }
+        
+        .btn-custom:disabled {
+            background: #cbd5e0;
+            cursor: not-allowed;
+            box-shadow: none;
+            transform: none;
+        }
+        
+        .alert {
+            border-radius: 10px;
+            border: none;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="main-card">
+            <h1><i class="fas fa-file-code"></i> HTML Email Template Annotator</h1>
+            <p class="subtitle">Automatically detect and annotate form fields and hyperlinks in your email templates</p>
+            
+            {% with messages = get_flashed_messages() %}
+                {% if messages %}
+                    {% for message in messages %}
+                        <div class="alert alert-warning alert-dismissible fade show" role="alert">
+                            <i class="fas fa-exclamation-triangle"></i> {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+            
+            <ul class="feature-list">
+                <li><i class="fas fa-check-circle"></i> Upload multiple HTML email templates</li>
+                <li><i class="fas fa-check-circle"></i> Automatic detection of form fields (inputs, textareas, selects, buttons)</li>
+                <li><i class="fas fa-check-circle"></i> Automatic detection of hyperlinks and email addresses</li>
+                <li><i class="fas fa-check-circle"></i> Interactive editor to review, edit, add, or delete annotations</li>
+                <li><i class="fas fa-check-circle"></i> Export as annotated PDFs with margin notes</li>
+            </ul>
+            
+            <form method="POST" action="/upload" enctype="multipart/form-data" id="uploadForm">
+                <div class="upload-area" id="uploadArea">
+                    <i class="fas fa-cloud-upload-alt upload-icon"></i>
+                    <div class="upload-text">Drag & Drop HTML Files Here</div>
+                    <div class="upload-subtext">or click to browse</div>
+                    <input type="file" name="files" id="files" accept=".html,.htm" multiple required>
+                </div>
+                
+                <div class="file-list" id="fileList">
+                    <h5><i class="fas fa-list"></i> Selected Files:</h5>
+                    <div id="fileItems"></div>
+                </div>
+                
+                <div class="d-grid gap-2 mt-4">
+                    <button type="submit" class="btn btn-custom" id="submitBtn" disabled>
+                        <i class="fas fa-magic"></i> Process & Annotate Templates
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('files');
+        const fileList = document.getElementById('fileList');
+        const fileItems = document.getElementById('fileItems');
+        const submitBtn = document.getElementById('submitBtn');
+        
+        let selectedFiles = [];
+        
+        // Click to upload
+        uploadArea.addEventListener('click', () => {
+            fileInput.click();
+        });
+        
+        // Drag and drop
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+        
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            
+            const files = Array.from(e.dataTransfer.files).filter(file => 
+                file.name.endsWith('.html') || file.name.endsWith('.htm')
+            );
+            
+            if (files.length > 0) {
+                handleFiles(files);
+            }
+        });
+        
+        // File input change
+        fileInput.addEventListener('change', (e) => {
+            const files = Array.from(e.target.files);
+            handleFiles(files);
+        });
+        
+        function handleFiles(files) {
+            selectedFiles = files;
+            updateFileList();
+            submitBtn.disabled = false;
+        }
+        
+        function updateFileList() {
+            if (selectedFiles.length === 0) {
+                fileList.style.display = 'none';
+                submitBtn.disabled = true;
+                return;
+            }
+            
+            fileList.style.display = 'block';
+            fileItems.innerHTML = '';
+            
+            selectedFiles.forEach((file, index) => {
+                const fileItem = document.createElement('div');
+                fileItem.className = 'file-item';
+                fileItem.innerHTML = `
+                    <i class="fas fa-file-code"></i>
+                    <span>${file.name}</span>
+                    <i class="fas fa-times remove-file" data-index="${index}"></i>
+                `;
+                fileItems.appendChild(fileItem);
+            });
+            
+            // Add remove functionality
+            document.querySelectorAll('.remove-file').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const index = parseInt(e.target.dataset.index);
+                    removeFile(index);
+                });
+            });
+        }
+        
+        function removeFile(index) {
+            selectedFiles.splice(index, 1);
+            
+            // Update file input
+            const dt = new DataTransfer();
+            selectedFiles.forEach(file => dt.items.add(file));
+            fileInput.files = dt.files;
+            
+            updateFileList();
+        }
+    </script>
+</body>
+</html>

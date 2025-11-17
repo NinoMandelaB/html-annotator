@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Annotation Editor</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/editor.css') }}">
+</head>
+<body>
+    <div class="editor-container">
+        <!-- Top Navigation Bar -->
+        <nav class="navbar navbar-dark bg-dark">
+            <div class="container-fluid">
+                <span class="navbar-brand mb-0 h1">
+                    <i class="fas fa-edit"></i> Annotation Editor
+                </span>
+                <div class="d-flex">
+                    <button class="btn btn-outline-light me-2" onclick="clearSession()">
+                        <i class="fas fa-times"></i> Cancel
+                    </button>
+                    <button class="btn btn-success" onclick="generatePDFs()" id="generateBtn">
+                        <i class="fas fa-file-pdf"></i> Generate PDFs
+                    </button>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Main Editor Layout -->
+        <div class="editor-layout">
+            <!-- Left Sidebar: File List -->
+            <div class="sidebar sidebar-left">
+                <div class="sidebar-header">
+                    <h5><i class="fas fa-folder-open"></i> Files</h5>
+                </div>
+                <div class="file-list" id="fileListSidebar">
+                    {% for file in files_data %}
+                    <div class="file-item {% if loop.first %}active{% endif %}" 
+                         data-file-id="{{ file.id }}"
+                         onclick="loadFile('{{ file.id }}')">
+                        <div class="file-item-header">
+                            <i class="fas fa-file-code"></i>
+                            <span class="file-name">{{ file.filename }}</span>
+                        </div>
+                        <div class="file-item-meta">
+                            <span class="badge bg-primary">{{ file.annotations|length }} annotations</span>
+                            <input type="checkbox" class="form-check-input file-select" 
+                                   data-file-id="{{ file.id }}" checked>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Center: HTML Preview -->
+            <div class="preview-area">
+                <div class="preview-header">
+                    <h5 id="previewTitle">Preview</h5>
+                    <div class="btn-group" role="group">
+                        <button class="btn btn-sm btn-outline-primary" onclick="toggleAddMode()" id="addModeBtn">
+                            <i class="fas fa-plus"></i> Add Annotation
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="zoomIn()">
+                            <i class="fas fa-search-plus"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="zoomOut()">
+                            <i class="fas fa-search-minus"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="resetZoom()">
+                            <i class="fas fa-undo"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="preview-content" id="previewContent">
+                    <div id="addModeOverlay" class="add-mode-overlay" style="display: none;">
+                        <p><i class="fas fa-hand-pointer"></i> Click on any element to add an annotation</p>
+                    </div>
+                    <iframe id="previewFrame" frameborder="0"></iframe>
+                </div>
+            </div>
+
+            <!-- Right Sidebar: Annotation List -->
+            <div class="sidebar sidebar-right">
+                <div class="sidebar-header">
+                    <h5><i class="fas fa-list"></i> Annotations</h5>
+                    <span class="annotation-count badge bg-secondary" id="annotationCount">0</span>
+                </div>
+                <div class="annotation-list" id="annotationList">
+                    <!-- Annotations will be loaded dynamically -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Annotation Modal -->
+    <div class="modal fade" id="editModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Edit Annotation</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Label</label>
+                        <input type="text" class="form-control" id="editLabel">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Type</label>
+                        <select class="form-select" id="editType" disabled>
+                            <option value="form_field">Form Field</option>
+                            <option value="hyperlink">Hyperlink</option>
+                        </select>
+                    </div>
+                    <div class="mb-3" id="urlFieldGroup">
+                        <label class="form-label">URL</label>
+                        <input type="text" class="form-control" id="editUrl">
+                    </div>
+                    <div class="mb-3" id="nameFieldGroup">
+                        <label class="form-label">Field Name</label>
+                        <input type="text" class="form-control" id="editName">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="saveAnnotationEdit()">Save Changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Annotation Modal -->
+    <div class="modal fade" id="addModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add New Annotation</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Label</label>
+                        <input type="text" class="form-control" id="addLabel" placeholder="Enter annotation label">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Type</label>
+                        <select class="form-select" id="addType" onchange="toggleAddFields()">
+                            <option value="form_field">Form Field</option>
+                            <option value="hyperlink">Hyperlink</option>
+                        </select>
+                    </div>
+                    <div class="mb-3" id="addUrlGroup">
+                        <label class="form-label">URL</label>
+                        <input type="text" class="form-control" id="addUrl" placeholder="https://example.com">
+                    </div>
+                    <div class="mb-3" id="addNameGroup">
+                        <label class="form-label">Field Name</label>
+                        <input type="text" class="form-control" id="addName" placeholder="field_name">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">CSS Selector</label>
+                        <input type="text" class="form-control" id="addSelector" 
+                               placeholder="e.g., #email-input or .submit-button">
+                        <small class="text-muted">Used to locate the element in the HTML</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="saveNewAnnotation()">Add Annotation</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{{ url_for('static', filename='js/editor.js') }}"></script>
+</body>
+</html>

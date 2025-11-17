@@ -1,0 +1,586 @@
+// Editor JavaScript
+
+let currentFileId = null;
+let currentAnnotations = [];
+let zoomLevel = 1;
+let isAddMode = false;
+let editingAnnotationId = null;
+
+// Initialize editor on page load
+document.addEventListener('DOMContentLoaded', function() {
+    // Load the first file automatically
+    const firstFile = document.querySelector('.file-item');
+    if (firstFile) {
+        const fileId = firstFile.dataset.fileId;
+        loadFile(fileId);
+    }
+    
+    // Setup event listeners
+    setupEventListeners();
+});
+
+function setupEventListeners() {
+    // File selection checkboxes
+    document.querySelectorAll('.file-select').forEach(checkbox => {
+        checkbox.addEventListener('click', function(e) {
+            e.stopPropagation();
+        });
+    });
+}
+
+// Load a file and its annotations
+async function loadFile(fileId) {
+    try {
+        // Update active state in file list
+        document.querySelectorAll('.file-item').forEach(item => {
+            item.classList.remove('active');
+        });
+        document.querySelector(`[data-file-id="${fileId}"]`).classList.add('active');
+        
+        currentFileId = fileId;
+        
+        // Show loading state
+        document.getElementById('annotationList').innerHTML = '<div class="loading"><i class="fas fa-spinner"></i></div>';
+        
+        // Fetch file data
+        const response = await fetch(`/api/get_file/${fileId}`);
+        const data = await response.json();
+        
+        if (data.error) {
+            showError('Failed to load file');
+            return;
+        }
+        
+        // Load HTML into iframe
+        const iframe = document.getElementById('previewFrame');
+        iframe.srcdoc = data.html;
+        
+        // Wait for iframe to load
+        iframe.onload = function() {
+            setupIframeInteraction();
+        };
+        
+        // Store and display annotations
+        currentAnnotations = data.annotations;
+        displayAnnotations();
+        
+        // Update title
+        const fileName = document.querySelector(`[data-file-id="${fileId}"] .file-name`).textContent;
+        document.getElementById('previewTitle').textContent = fileName;
+        
+    } catch (error) {
+        console.error('Error loading file:', error);
+        showError('Failed to load file');
+    }
+}
+
+// Setup click interaction in iframe
+function setupIframeInteraction() {
+    const iframe = document.getElementById('previewFrame');
+    const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+    
+    // Add click handler for add mode
+    iframeDoc.addEventListener('click', function(e) {
+        if (isAddMode) {
+            e.preventDefault();
+            e.stopPropagation();
+            handleElementClick(e.target);
+        }
+    });
+    
+    // Highlight annotation on hover
+    iframeDoc.addEventListener('mouseover', function(e) {
+        const annotationId = e.target.dataset.annotationId;
+        if (annotationId) {
+            highlightAnnotation(annotationId);
+        }
+    });
+    
+    iframeDoc.addEventListener('mouseout', function(e) {
+        const annotationId = e.target.dataset.annotationId;
+        if (annotationId) {
+            unhighlightAnnotation(annotationId);
+        }
+    });
+}
+
+// Handle element click in add mode
+function handleElementClick(element) {
+    // Generate CSS selector for clicked element
+    const selector = generateSelectorForElement(element);
+    
+    // Pre-fill modal with detected information
+    document.getElementById('addSelector').value = selector;
+    
+    // Try to detect type
+    const tagName = element.tagName.toLowerCase();
+    if (['input', 'textarea', 'select', 'button'].includes(tagName)) {
+        document.getElementById('addType').value = 'form_field';
+        document.getElementById('addName').value = element.name || element.id || '';
+        document.getElementById('addLabel').value = `${tagName}: ${element.name || element.id || 'unnamed'}`;
+    } else if (tagName === 'a') {
+        document.getElementById('addType').value = 'hyperlink';
+        document.getElementById('addUrl').value = element.href || '';
+        document.getElementById('addLabel').value = element.textContent.trim() || element.href || '';
+    }
+    
+    toggleAddFields();
+    
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('addModal'));
+    modal.show();
+    
+    // Exit add mode
+    toggleAddMode();
+}
+
+// Generate CSS selector for an element
+function generateSelectorForElement(element) {
+    if (element.id) {
+        return '#' + element.id;
+    }
+    
+    let selector = element.tagName.toLowerCase();
+    
+    if (element.className) {
+        const classes = element.className.split(' ').filter(c => c.trim());
+        if (classes.length > 0) {
+            selector += '.' + classes.join('.');
+        }
+    } else if (element.name) {
+        selector += `[name="${element.name}"]`;
+    }
+    
+    return selector;
+}
+
+// Display annotations in the sidebar
+function displayAnnotations() {
+    const container = document.getElementById('annotationList');
+    const count = document.getElementById('annotationCount');
+    
+    count.textContent = currentAnnotations.length;
+    
+    if (currentAnnotations.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-inbox"></i>
+                <p>No annotations detected</p>
+            </div>
+        `;
+        return;
+    }
+    
+    container.innerHTML = '';
+    
+    currentAnnotations.forEach((annotation, index) => {
+        const item = createAnnotationItem(annotation, index);
+        container.appendChild(item);
+    });
+    
+    // Setup drag and drop
+    setupDragAndDrop();
+}
+
+// Create annotation item HTML
+function createAnnotationItem(annotation, index) {
+    const item = document.createElement('div');
+    item.className = 'annotation-item';
+    item.draggable = true;
+    item.dataset.annotationId = annotation.id;
+    item.dataset.index = index;
+    
+    const typeClass = annotation.type === 'form_field' ? 'annotation-type-form' : 'annotation-type-link';
+    const typeText = annotation.type === 'form_field' ? 'Form Field' : 'Link';
+    
+    let detailsHTML = '';
+    if (annotation.type === 'hyperlink' && annotation.url) {
+        detailsHTML = `<div><strong>URL:</strong> ${annotation.url}</div>`;
+    } else if (annotation.type === 'form_field') {
+        if (annotation.name) {
+            detailsHTML += `<div><strong>Name:</strong> ${annotation.name}</div>`;
+        }
+        if (annotation.input_type) {
+            detailsHTML += `<div><strong>Type:</strong> ${annotation.input_type}</div>`;
+        }
+    }
+    
+    item.innerHTML = `
+        <div class="annotation-item-header">
+            <span class="annotation-type-badge ${typeClass}">${typeText}</span>
+            <div class="annotation-actions">
+                <button class="annotation-action-btn edit" onclick="editAnnotation('${annotation.id}')" title="Edit">
+                    <i class="fas fa-edit"></i>
+                </button>
+                <button class="annotation-action-btn delete" onclick="deleteAnnotation('${annotation.id}')" title="Delete">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </div>
+        <div class="annotation-label">${annotation.label}</div>
+        <div class="annotation-details">
+            ${detailsHTML}
+        </div>
+    `;
+    
+    return item;
+}
+
+// Setup drag and drop for reordering annotations
+function setupDragAndDrop() {
+    const items = document.querySelectorAll('.annotation-item');
+    
+    items.forEach(item => {
+        item.addEventListener('dragstart', handleDragStart);
+        item.addEventListener('dragover', handleDragOver);
+        item.addEventListener('drop', handleDrop);
+        item.addEventListener('dragend', handleDragEnd);
+    });
+}
+
+let draggedItem = null;
+
+function handleDragStart(e) {
+    draggedItem = this;
+    this.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+}
+
+function handleDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    
+    const afterElement = getDragAfterElement(e.clientY);
+    if (afterElement == null) {
+        this.parentNode.appendChild(draggedItem);
+    } else {
+        this.parentNode.insertBefore(draggedItem, afterElement);
+    }
+}
+
+function handleDrop(e) {
+    e.stopPropagation();
+    return false;
+}
+
+function handleDragEnd(e) {
+    this.classList.remove('dragging');
+    
+    // Update annotation order
+    const items = document.querySelectorAll('.annotation-item');
+    const newOrder = [];
+    items.forEach(item => {
+        const id = item.dataset.annotationId;
+        const annotation = currentAnnotations.find(a => a.id === id);
+        if (annotation) {
+            newOrder.push(annotation);
+        }
+    });
+    
+    currentAnnotations = newOrder;
+    saveAnnotations();
+}
+
+function getDragAfterElement(y) {
+    const draggableElements = [...document.querySelectorAll('.annotation-item:not(.dragging)')];
+    
+    return draggableElements.reduce((closest, child) => {
+        const box = child.getBoundingClientRect();
+        const offset = y - box.top - box.height / 2;
+        
+        if (offset < 0 && offset > closest.offset) {
+            return { offset: offset, element: child };
+        } else {
+            return closest;
+        }
+    }, { offset: Number.NEGATIVE_INFINITY }).element;
+}
+
+// Toggle add annotation mode
+function toggleAddMode() {
+    isAddMode = !isAddMode;
+    const overlay = document.getElementById('addModeOverlay');
+    const btn = document.getElementById('addModeBtn');
+    
+    if (isAddMode) {
+        overlay.style.display = 'block';
+        btn.classList.add('active');
+        btn.innerHTML = '<i class="fas fa-times"></i> Cancel Add Mode';
+    } else {
+        overlay.style.display = 'none';
+        btn.classList.remove('active');
+        btn.innerHTML = '<i class="fas fa-plus"></i> Add Annotation';
+    }
+}
+
+// Edit annotation
+function editAnnotation(annotationId) {
+    const annotation = currentAnnotations.find(a => a.id === annotationId);
+    if (!annotation) return;
+    
+    editingAnnotationId = annotationId;
+    
+    // Fill form
+    document.getElementById('editLabel').value = annotation.label;
+    document.getElementById('editType').value = annotation.type;
+    
+    if (annotation.type === 'hyperlink') {
+        document.getElementById('urlFieldGroup').style.display = 'block';
+        document.getElementById('nameFieldGroup').style.display = 'none';
+        document.getElementById('editUrl').value = annotation.url || '';
+    } else {
+        document.getElementById('urlFieldGroup').style.display = 'none';
+        document.getElementById('nameFieldGroup').style.display = 'block';
+        document.getElementById('editName').value = annotation.name || '';
+    }
+    
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('editModal'));
+    modal.show();
+}
+
+// Save annotation edit
+async function saveAnnotationEdit() {
+    const annotation = currentAnnotations.find(a => a.id === editingAnnotationId);
+    if (!annotation) return;
+    
+    // Update annotation
+    annotation.label = document.getElementById('editLabel').value;
+    
+    if (annotation.type === 'hyperlink') {
+        annotation.url = document.getElementById('editUrl').value;
+    } else {
+        annotation.name = document.getElementById('editName').value;
+    }
+    
+    // Save to server
+    await saveAnnotations();
+    
+    // Refresh display
+    displayAnnotations();
+    
+    // Close modal
+    bootstrap.Modal.getInstance(document.getElementById('editModal')).hide();
+}
+
+// Delete annotation
+async function deleteAnnotation(annotationId) {
+    if (!confirm('Are you sure you want to delete this annotation?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/delete_annotation', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                file_id: currentFileId,
+                annotation_id: annotationId
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            currentAnnotations = currentAnnotations.filter(a => a.id !== annotationId);
+            displayAnnotations();
+            loadFile(currentFileId); // Reload to update preview
+        } else {
+            showError('Failed to delete annotation');
+        }
+    } catch (error) {
+        console.error('Error deleting annotation:', error);
+        showError('Failed to delete annotation');
+    }
+}
+
+// Toggle add modal fields based on type
+function toggleAddFields() {
+    const type = document.getElementById('addType').value;
+    
+    if (type === 'hyperlink') {
+        document.getElementById('addUrlGroup').style.display = 'block';
+        document.getElementById('addNameGroup').style.display = 'none';
+    } else {
+        document.getElementById('addUrlGroup').style.display = 'none';
+        document.getElementById('addNameGroup').style.display = 'block';
+    }
+}
+
+// Save new annotation
+async function saveNewAnnotation() {
+    const type = document.getElementById('addType').value;
+    const label = document.getElementById('addLabel').value;
+    const selector = document.getElementById('addSelector').value;
+    
+    if (!label || !selector) {
+        alert('Please fill in all required fields');
+        return;
+    }
+    
+    const newAnnotation = {
+        type: type,
+        label: label,
+        selector: selector,
+        element_type: type === 'hyperlink' ? 'a' : 'input'
+    };
+    
+    if (type === 'hyperlink') {
+        newAnnotation.url = document.getElementById('addUrl').value;
+    } else {
+        newAnnotation.name = document.getElementById('addName').value;
+        newAnnotation.input_type = 'text';
+    }
+    
+    try {
+        const response = await fetch('/api/add_annotation', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                file_id: currentFileId,
+                annotation: newAnnotation
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            currentAnnotations.push(data.annotation);
+            displayAnnotations();
+            loadFile(currentFileId); // Reload to update preview
+            
+            // Close modal and reset form
+            bootstrap.Modal.getInstance(document.getElementById('addModal')).hide();
+            document.getElementById('addLabel').value = '';
+            document.getElementById('addUrl').value = '';
+            document.getElementById('addName').value = '';
+            document.getElementById('addSelector').value = '';
+        } else {
+            showError('Failed to add annotation');
+        }
+    } catch (error) {
+        console.error('Error adding annotation:', error);
+        showError('Failed to add annotation');
+    }
+}
+
+// Save annotations to server
+async function saveAnnotations() {
+    try {
+        await fetch('/api/update_annotations', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                file_id: currentFileId,
+                annotations: currentAnnotations
+            })
+        });
+    } catch (error) {
+        console.error('Error saving annotations:', error);
+    }
+}
+
+// Highlight annotation
+function highlightAnnotation(annotationId) {
+    const item = document.querySelector(`[data-annotation-id="${annotationId}"]`);
+    if (item) {
+        item.style.backgroundColor = '#fff3cd';
+    }
+}
+
+// Unhighlight annotation
+function unhighlightAnnotation(annotationId) {
+    const item = document.querySelector(`[data-annotation-id="${annotationId}"]`);
+    if (item) {
+        item.style.backgroundColor = '';
+    }
+}
+
+// Zoom functions
+function zoomIn() {
+    zoomLevel = Math.min(zoomLevel + 0.1, 2);
+    applyZoom();
+}
+
+function zoomOut() {
+    zoomLevel = Math.max(zoomLevel - 0.1, 0.5);
+    applyZoom();
+}
+
+function resetZoom() {
+    zoomLevel = 1;
+    applyZoom();
+}
+
+function applyZoom() {
+    const iframe = document.getElementById('previewFrame');
+    iframe.style.transform = `scale(${zoomLevel})`;
+    iframe.style.width = `${100 / zoomLevel}%`;
+    iframe.style.height = `${100 / zoomLevel}%`;
+}
+
+// Generate PDFs
+async function generatePDFs() {
+    const selectedFiles = [];
+    document.querySelectorAll('.file-select:checked').forEach(checkbox => {
+        selectedFiles.push(checkbox.dataset.fileId);
+    });
+    
+    if (selectedFiles.length === 0) {
+        alert('Please select at least one file to generate PDFs');
+        return;
+    }
+    
+    const btn = document.getElementById('generateBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
+    
+    try {
+        const response = await fetch('/generate_pdfs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ selected_files: selectedFiles })
+        });
+        
+        if (response.ok) {
+            // Download the ZIP file
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'annotated_email_templates.zip';
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        } else {
+            showError('Failed to generate PDFs');
+        }
+    } catch (error) {
+        console.error('Error generating PDFs:', error);
+        showError('Failed to generate PDFs');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-file-pdf"></i> Generate PDFs';
+    }
+}
+
+// Clear session and start over
+async function clearSession() {
+    if (!confirm('Are you sure you want to cancel and start over?')) {
+        return;
+    }
+    
+    try {
+        await fetch('/clear_session', { method: 'POST' });
+        window.location.href = '/';
+    } catch (error) {
+        console.error('Error clearing session:', error);
+        window.location.href = '/';
+    }
+}
+
+// Show error message
+function showError(message) {
+    alert(message);
+}

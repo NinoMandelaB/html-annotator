@@ -1,0 +1,6 @@
+Flask==2.3.2
+beautifulsoup4==4.12.2
+lxml==4.9.3
+weasyprint==60.1
+Pillow==10.1.0
+Werkzeug==2.3.6
