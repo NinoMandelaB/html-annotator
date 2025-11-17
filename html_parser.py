@@ -1,6 +1,6 @@
 """
 HTML Parser Module
-Detects form fields and hyperlinks in HTML email templates.
+Detects form fields, hyperlinks, and template variables in HTML email templates.
 """
 
 from bs4 import BeautifulSoup
@@ -9,7 +9,7 @@ import uuid
 
 def parse_html_and_detect_elements(html_content):
     """
-    Parse HTML content and detect form fields and hyperlinks.
+    Parse HTML content and detect form fields, hyperlinks, and template variables.
     
     Args:
         html_content (str): The HTML content to parse
@@ -17,6 +17,9 @@ def parse_html_and_detect_elements(html_content):
     Returns:
         list: List of annotation dictionaries
     """
+    # First, wrap all template variables in spans for detection
+    html_content = wrap_template_variables(html_content)
+    
     soup = BeautifulSoup(html_content, 'html.parser')
     annotations = []
     
@@ -24,7 +27,7 @@ def parse_html_and_detect_elements(html_content):
     form_elements = soup.find_all(['input', 'textarea', 'select', 'button'])
     
     for idx, element in enumerate(form_elements):
-        # Skip hidden inputs and submit buttons initially
+        # Skip hidden inputs
         input_type = element.get('type', 'text')
         if input_type == 'hidden':
             continue
@@ -98,12 +101,78 @@ def parse_html_and_detect_elements(html_content):
         }
         annotations.append(annotation)
     
+    # Detect template variables (now wrapped in spans)
+    variable_spans = soup.find_all('span', {'data-template-var': True})
+    
+    for span in variable_spans:
+        var_name = span.get('data-template-var', '')
+        var_type = span.get('data-var-type', 'variable')
+        var_text = span.get_text(strip=True)
+        
+        # Generate CSS selector
+        selector = generate_css_selector(span)
+        
+        # Create label based on type
+        if var_type == 'customText':
+            label = f"Custom Text Block: {var_name}"
+        else:
+            label = f"Variable: {var_name}"
+        
+        annotation = {
+            "id": str(uuid.uuid4()),
+            "type": "template_variable",
+            "element_type": "span",
+            "input_type": var_type,
+            "selector": selector,
+            "name": var_name,
+            "element_id": span.get('id', ''),
+            "label": label,
+            "text": var_text,
+            "variable_name": var_name,
+            "url": None
+        }
+        annotations.append(annotation)
+    
     return annotations
+
+def wrap_template_variables(html_content):
+    """
+    Wrap all template variables ({{...}}) in span tags for easy detection.
+    
+    Args:
+        html_content (str): Original HTML content
+        
+    Returns:
+        str: HTML with variables wrapped in spans
+    """
+    # Pattern for customText blocks: {{customText[...]}}
+    custom_text_pattern = r'\{\{customText\[(.*?)\]\}\}'
+    
+    def replace_custom_text(match):
+        content = match.group(1)
+        var_id = f"custom-text-{uuid.uuid4().hex[:8]}"
+        # Create a descriptive name from the content
+        var_name = content[:50] + "..." if len(content) > 50 else content
+        return f'<span class="template-var" data-template-var="{var_name}" data-var-type="customText" id="{var_id}">{match.group(0)}</span>'
+    
+    html_content = re.sub(custom_text_pattern, replace_custom_text, html_content, flags=re.DOTALL)
+    
+    # Pattern for regular variables: {{variableName}}
+    variable_pattern = r'\{\{([a-zA-Z0-9_.]+)\}\}'
+    
+    def replace_variable(match):
+        var_name = match.group(1)
+        var_id = f"var-{var_name.replace('.', '-')}-{uuid.uuid4().hex[:8]}"
+        return f'<span class="template-var" data-template-var="{var_name}" data-var-type="variable" id="{var_id}">{match.group(0)}</span>'
+    
+    html_content = re.sub(variable_pattern, replace_variable, html_content)
+    
+    return html_content
 
 def generate_css_selector(element):
     """
-    Generate a CSS selector for an element.
-    Prioritizes ID, then combination of tag + class, then tag + name.
+    Generate a unique CSS selector for an element.
+    Prioritizes ID, then combination of tag + class, then tag + data attributes.
     
     Args:
         element: BeautifulSoup element
@@ -122,13 +191,28 @@ def generate_css_selector(element):
     if element.get('class'):
         classes = element.get('class')
         if isinstance(classes, list):
-            selector += '.' + '.'.join(classes)
+            # Use first class to keep selector simple
+            selector += f'.{classes[0]}'
         else:
             selector += f'.{classes}'
+    
+    # Add data-template-var if it's a template variable
+    elif element.get('data-template-var'):
+        var_name = element.get('data-template-var')
+        selector += f'[data-template-var="{var_name}"]'
     
     # Add name attribute if available and no class
     elif element.get('name'):
         selector += f'[name="{element.get("name")}"]'
+    
+    # If still not unique enough, add nth-of-type
+    # This helps when there are multiple similar elements
+    if selector == element.name:
+        # Find position among siblings of same type
+        siblings = [sib for sib in element.parent.find_all(element.name) if sib == element]
+        if len(siblings) > 1:
+            index = list(element.parent.find_all(element.name)).index(element) + 1
+            selector += f':nth-of-type({index})'
     
     return selector
 
@@ -171,6 +255,16 @@ def inject_visual_annotations(html_content, annotations):
             box-shadow: 0 0 10px rgba(231, 76, 60, 0.5) !important;
         }
         
+        .annotation-highlight-variable {
+            background-color: #fff3cd !important;
+            outline: 2px solid #f39c12 !important;
+            outline-offset: 1px;
+            padding: 2px 4px;
+            border-radius: 3px;
+            position: relative;
+            box-shadow: 0 0 8px rgba(243, 156, 18, 0.4) !important;
+        }
+        
         .annotation-badge {
             position: absolute;
             background: #2c3e50;
@@ -191,6 +285,10 @@ def inject_visual_annotations(html_content, annotations):
         
         .annotation-highlight-link .annotation-badge {
             background: #e74c3c;
+        }
+        
+        .annotation-highlight-variable .annotation-badge {
+            background: #f39c12;
         }
     """
     soup.head.append(style_tag)
@@ -214,11 +312,13 @@ def inject_visual_annotations(html_content, annotations):
                     element['class'] = element.get('class', []) + ['annotation-highlight-form']
                 elif annotation['type'] == 'hyperlink':
                     element['class'] = element.get('class', []) + ['annotation-highlight-link']
+                elif annotation['type'] == 'template_variable':
+                    element['class'] = element.get('class', []) + ['annotation-highlight-variable']
                 
                 # Make element position relative if not already positioned
                 style = element.get('style', '')
                 if 'position' not in style:
-                    element['style'] = style + '; position: relative;'
+                    element['style'] = (style + '; position: relative;').strip()
         
         except Exception as e:
             # If selector fails, skip this annotation
@@ -230,7 +330,7 @@ def inject_visual_annotations(html_content, annotations):
 def create_annotation_overlays_for_pdf(html_content, annotations):
     """
     Create visual overlays for PDF generation (similar to original PDF style).
-    Adds red boxes and margin text boxes with arrows.
+    Adds red boxes and margin text boxes.
     
     Args:
         html_content (str): Original HTML content
@@ -247,7 +347,7 @@ def create_annotation_overlays_for_pdf(html_content, annotations):
         container = soup.new_tag('div', style='display: flex; position: relative;')
         
         # Create content area (original HTML)
-        content_area = soup.new_tag('div', style='flex: 1; padding-right: 20px;')
+        content_area = soup.new_tag('div', style='flex: 1; padding-right: 20px; max-width: 70%;')
         
         # Move all body children to content area
         body_children = list(soup.body.children)
@@ -256,7 +356,8 @@ def create_annotation_overlays_for_pdf(html_content, annotations):
         
         # Create margin area for annotations
         margin_area = soup.new_tag('div', style='''
-            width: 250px;
+            width: 30%;
+            min-width: 250px;
             border-left: 2px solid #ccc;
             padding: 20px 10px;
             background: #f9f9f9;
@@ -275,20 +376,32 @@ def create_annotation_overlays_for_pdf(html_content, annotations):
                 element = soup.select_one(selector)
                 
                 if element:
-                    # Add red box around element
-                    element['style'] = element.get('style', '') + '; border: 2px solid #e74c3c; position: relative;'
+                    # Determine color based on type
+                    if annotation['type'] == 'template_variable':
+                        border_color = '#f39c12'
+                        badge_color = '#f39c12'
+                    elif annotation['type'] == 'hyperlink':
+                        border_color = '#e74c3c'
+                        badge_color = '#e74c3c'
+                    else:
+                        border_color = '#3498db'
+                        badge_color = '#3498db'
+                    
+                    # Add colored box around element
+                    current_style = element.get('style', '')
+                    element['style'] = f"{current_style}; border: 2px solid {border_color}; position: relative;"
                     
                     # Add number badge
                     badge = soup.new_tag('span', style=f'''
                         position: absolute;
                         top: -10px;
                         right: -10px;
-                        background: #e74c3c;
+                        background: {badge_color};
                         color: white;
                         border-radius: 50%;
                         width: 20px;
                         height: 20px;
-                        display: flex;
+                        display: inline-flex;
                         align-items: center;
                         justify-content: center;
                         font-size: 12px;
@@ -299,33 +412,38 @@ def create_annotation_overlays_for_pdf(html_content, annotations):
                     element.append(badge)
                     
                     # Add annotation text to margin
-                    margin_item = soup.new_tag('div', style='''
+                    margin_item = soup.new_tag('div', style=f'''
                         margin-bottom: 15px;
                         padding: 10px;
                         background: white;
                         border: 1px solid #ddd;
+                        border-left: 4px solid {badge_color};
                         border-radius: 4px;
                     ''')
                     
                     # Number
-                    number_span = soup.new_tag('span', style='font-weight: bold; color: #e74c3c;')
+                    number_span = soup.new_tag('span', style=f'font-weight: bold; color: {badge_color};')
                     number_span.string = f"{annotation_counter}. "
                     margin_item.append(number_span)
                     
                     # Type and label
-                    type_span = soup.new_tag('div', style='margin-top: 5px;')
-                    type_text = "Form Field" if annotation['type'] == 'form_field' else "Hyperlink"
+                    type_span = soup.new_tag('div', style='margin-top: 5px; font-weight: 600;')
+                    type_map = {
+                        'form_field': 'Form Field',
+                        'hyperlink': 'Hyperlink',
+                        'template_variable': 'Template Variable'
+                    }
+                    type_text = type_map.get(annotation['type'], 'Unknown')
                     type_span.string = f"{type_text}: {annotation['label']}"
                     margin_item.append(type_span)
                     
-                    # URL if hyperlink
+                    # Additional details
                     if annotation['type'] == 'hyperlink' and annotation.get('url'):
-                        url_span = soup.new_tag('div', style='margin-top: 3px; color: #3498db; word-break: break-all;')
-                        url_span.string = annotation['url']
+                        url_span = soup.new_tag('div', style='margin-top: 3px; color: #3498db; word-break: break-all; font-size: 9px;')
+                        url_span.string = f"URL: {annotation['url']}"
                         margin_item.append(url_span)
                     
-                    # Field info if form field
-                    if annotation['type'] == 'form_field':
+                    elif annotation['type'] == 'form_field':
                         if annotation.get('name'):
                             name_span = soup.new_tag('div', style='margin-top: 3px; color: #666;')
                             name_span.string = f"Name: {annotation['name']}"
@@ -334,6 +452,11 @@ def create_annotation_overlays_for_pdf(html_content, annotations):
                             type_info_span = soup.new_tag('div', style='margin-top: 3px; color: #666;')
                             type_info_span.string = f"Type: {annotation['input_type']}"
                             margin_item.append(type_info_span)
+                    
+                    elif annotation['type'] == 'template_variable':
+                        var_span = soup.new_tag('div', style='margin-top: 3px; color: #666; font-family: monospace;')
+                        var_span.string = f"Variable: {annotation.get('variable_name', '')}"
+                        margin_item.append(var_span)
                     
                     margin_area.append(margin_item)
                     annotation_counter += 1
@@ -345,6 +468,7 @@ def create_annotation_overlays_for_pdf(html_content, annotations):
         # Assemble the layout
         container.append(content_area)
         container.append(margin_area)
+        soup.body.clear()
         soup.body.append(container)
     
     return str(soup)
