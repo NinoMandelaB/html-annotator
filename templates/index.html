@@ -215,7 +215,7 @@
                     <i class="fas fa-cloud-upload-alt upload-icon"></i>
                     <div class="upload-text">Drag & Drop HTML Files Here</div>
                     <div class="upload-subtext">or click to browse</div>
-                    <input type="file" name="files" id="files" accept=".html,.htm" multiple required>
+                    <input type="file" name="files" id="files" accept=".html,.htm" multiple>
                 </div>
                 
                 <div class="file-list" id="fileList">
@@ -239,8 +239,7 @@
         const fileList = document.getElementById('fileList');
         const fileItems = document.getElementById('fileItems');
         const submitBtn = document.getElementById('submitBtn');
-        
-        let selectedFiles = [];
+        const uploadForm = document.getElementById('uploadForm');
         
         // Click to upload
         uploadArea.addEventListener('click', () => {
@@ -266,24 +265,24 @@
             );
             
             if (files.length > 0) {
-                handleFiles(files);
+                // Create a new DataTransfer object to set files
+                const dataTransfer = new DataTransfer();
+                files.forEach(file => dataTransfer.items.add(file));
+                fileInput.files = dataTransfer.files;
+                
+                updateFileList();
             }
         });
         
         // File input change
-        fileInput.addEventListener('change', (e) => {
-            const files = Array.from(e.target.files);
-            handleFiles(files);
+        fileInput.addEventListener('change', () => {
+            updateFileList();
         });
         
-        function handleFiles(files) {
-            selectedFiles = files;
-            updateFileList();
-            submitBtn.disabled = false;
-        }
-        
         function updateFileList() {
-            if (selectedFiles.length === 0) {
+            const files = fileInput.files;
+            
+            if (files.length === 0) {
                 fileList.style.display = 'none';
                 submitBtn.disabled = true;
                 return;
@@ -291,37 +290,4 @@
             
             fileList.style.display = 'block';
             fileItems.innerHTML = '';
-            
-            selectedFiles.forEach((file, index) => {
-                const fileItem = document.createElement('div');
-                fileItem.className = 'file-item';
-                fileItem.innerHTML = `
-                    <i class="fas fa-file-code"></i>
-                    <span>${file.name}</span>
-                    <i class="fas fa-times remove-file" data-index="${index}"></i>
-                `;
-                fileItems.appendChild(fileItem);
-            });
-            
-            // Add remove functionality
-            document.querySelectorAll('.remove-file').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    const index = parseInt(e.target.dataset.index);
-                    removeFile(index);
-                });
-            });
-        }
-        
-        function removeFile(index) {
-            selectedFiles.splice(index, 1);
-            
-            // Update file input
-            const dt = new DataTransfer();
-            selectedFiles.forEach(file => dt.items.add(file));
-            fileInput.files = dt.files;
-            
-            updateFileList();
-        }
-    </script>
-</body>
-</html>
+            submitBtn.disabled = false;
