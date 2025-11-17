@@ -55,7 +55,7 @@ def parse_html_and_detect_elements(html_content):
         
         annotation = {
             "id": str(uuid.uuid4()),
-            "type": "form_field",
+            "type": "element",  # Changed from "form_field" to "element"
             "element_type": element.name,
             "input_type": input_type,
             "selector": selector,
@@ -88,7 +88,7 @@ def parse_html_and_detect_elements(html_content):
         
         annotation = {
             "id": str(uuid.uuid4()),
-            "type": "hyperlink",
+            "type": "link",  # Changed from "hyperlink" to "link"
             "element_type": "a",
             "input_type": "email" if is_email else "url",
             "selector": selector,
@@ -114,13 +114,13 @@ def parse_html_and_detect_elements(html_content):
         
         # Create label based on type
         if var_type == 'customText':
-            label = f"Custom Text Block: {var_name}"
+            label = f"Custom Text Block: {var_name[:50]}"
         else:
             label = f"Variable: {var_name}"
         
         annotation = {
             "id": str(uuid.uuid4()),
-            "type": "template_variable",
+            "type": "element",  # Template variables are also "elements" (blue)
             "element_type": "span",
             "input_type": var_type,
             "selector": selector,
@@ -153,7 +153,7 @@ def wrap_template_variables(html_content):
         var_id = f"custom-text-{uuid.uuid4().hex[:8]}"
         # Create a descriptive name from the content
         var_name = content[:50] + "..." if len(content) > 50 else content
-        return f'<span class="template-var" data-template-var="{var_name}" data-var-type="customText" id="{var_id}">{match.group(0)}</span>'
+        return f'<span class="template-var template-var-custom" data-template-var="{var_name}" data-var-type="customText" id="{var_id}">{match.group(0)}</span>'
     
     html_content = re.sub(custom_text_pattern, replace_custom_text, html_content, flags=re.DOTALL)
     
@@ -163,7 +163,7 @@ def wrap_template_variables(html_content):
     def replace_variable(match):
         var_name = match.group(1)
         var_id = f"var-{var_name.replace('.', '-')}-{uuid.uuid4().hex[:8]}"
-        return f'<span class="template-var" data-template-var="{var_name}" data-var-type="variable" id="{var_id}">{match.group(0)}</span>'
+        return f'<span class="template-var template-var-simple" data-template-var="{var_name}" data-var-type="variable" id="{var_id}">{match.group(0)}</span>'
     
     html_content = re.sub(variable_pattern, replace_variable, html_content)
     
@@ -187,6 +187,13 @@ def generate_css_selector(element):
     # Build selector with tag name
     selector = element.name
     
+    # For template variables, use data attribute
+    if element.get('data-template-var'):
+        var_name = element.get('data-template-var')
+        # Escape special characters in attribute selector
+        var_name_escaped = var_name.replace('"', '\\"')
+        return f'{selector}[data-template-var="{var_name_escaped}"]'
+    
     # Add class if available
     if element.get('class'):
         classes = element.get('class')
@@ -196,23 +203,9 @@ def generate_css_selector(element):
         else:
             selector += f'.{classes}'
     
-    # Add data-template-var if it's a template variable
-    elif element.get('data-template-var'):
-        var_name = element.get('data-template-var')
-        selector += f'[data-template-var="{var_name}"]'
-    
     # Add name attribute if available and no class
     elif element.get('name'):
         selector += f'[name="{element.get("name")}"]'
-    
-    # If still not unique enough, add nth-of-type
-    # This helps when there are multiple similar elements
-    if selector == element.name:
-        # Find position among siblings of same type
-        siblings = [sib for sib in element.parent.find_all(element.name) if sib == element]
-        if len(siblings) > 1:
-            index = list(element.parent.find_all(element.name)).index(element) + 1
-            selector += f':nth-of-type({index})'
     
     return selector
 
@@ -241,11 +234,12 @@ def inject_visual_annotations(html_content, annotations):
     style_tag = soup.new_tag('style')
     style_tag.string = """
         /* Annotation Styles */
-        .annotation-highlight-form {
+        .annotation-highlight-element {
             outline: 3px solid #3498db !important;
             outline-offset: 2px;
             position: relative;
             box-shadow: 0 0 10px rgba(52, 152, 219, 0.5) !important;
+            background-color: rgba(52, 152, 219, 0.05) !important;
         }
         
         .annotation-highlight-link {
@@ -253,16 +247,15 @@ def inject_visual_annotations(html_content, annotations):
             outline-offset: 2px;
             position: relative;
             box-shadow: 0 0 10px rgba(231, 76, 60, 0.5) !important;
+            background-color: rgba(231, 76, 60, 0.05) !important;
         }
         
-        .annotation-highlight-variable {
-            background-color: #fff3cd !important;
-            outline: 2px solid #f39c12 !important;
-            outline-offset: 1px;
-            padding: 2px 4px;
-            border-radius: 3px;
-            position: relative;
-            box-shadow: 0 0 8px rgba(243, 156, 18, 0.4) !important;
+        /* Specific styling for template variables */
+        span.annotation-highlight-element.template-var {
+            display: inline !important;
+            padding: 2px 4px !important;
+            border-radius: 3px !important;
+            background-color: rgba(52, 152, 219, 0.15) !important;
         }
         
         .annotation-badge {
@@ -279,16 +272,12 @@ def inject_visual_annotations(html_content, annotations):
             white-space: nowrap;
         }
         
-        .annotation-highlight-form .annotation-badge {
+        .annotation-highlight-element .annotation-badge {
             background: #3498db;
         }
         
         .annotation-highlight-link .annotation-badge {
             background: #e74c3c;
-        }
-        
-        .annotation-highlight-variable .annotation-badge {
-            background: #f39c12;
         }
     """
     soup.head.append(style_tag)
@@ -301,28 +290,43 @@ def inject_visual_annotations(html_content, annotations):
         
         try:
             # Find element using CSS selector
-            element = soup.select_one(selector)
+            elements = soup.select(selector)
             
-            if element:
-                # Add annotation ID as data attribute
-                element['data-annotation-id'] = annotation['id']
+            # If multiple elements found, use the first one
+            if not elements:
+                print(f"Could not find element for selector: {selector}")
+                continue
                 
-                # Add highlight class based on type
-                if annotation['type'] == 'form_field':
-                    element['class'] = element.get('class', []) + ['annotation-highlight-form']
-                elif annotation['type'] == 'hyperlink':
-                    element['class'] = element.get('class', []) + ['annotation-highlight-link']
-                elif annotation['type'] == 'template_variable':
-                    element['class'] = element.get('class', []) + ['annotation-highlight-variable']
-                
-                # Make element position relative if not already positioned
-                style = element.get('style', '')
-                if 'position' not in style:
-                    element['style'] = (style + '; position: relative;').strip()
+            element = elements[0]
+            
+            # Add annotation ID as data attribute
+            element['data-annotation-id'] = annotation['id']
+            
+            # Get existing classes
+            existing_classes = element.get('class', [])
+            if isinstance(existing_classes, str):
+                existing_classes = [existing_classes]
+            
+            # Add highlight class based on type
+            if annotation['type'] == 'link':
+                highlight_class = 'annotation-highlight-link'
+            else:  # element type
+                highlight_class = 'annotation-highlight-element'
+            
+            # Add the highlight class
+            existing_classes.append(highlight_class)
+            element['class'] = existing_classes
+            
+            # Make element position relative if not already positioned (for badge)
+            style = element.get('style', '')
+            if style and not style.endswith(';'):
+                style += ';'
+            if 'position' not in style:
+                element['style'] = f"{style} position: relative;"
         
         except Exception as e:
             # If selector fails, skip this annotation
-            print(f"Could not find element for selector: {selector}, Error: {e}")
+            print(f"Error applying annotation for selector {selector}: {e}")
             continue
     
     return str(soup)
@@ -330,7 +334,7 @@ def inject_visual_annotations(html_content, annotations):
 def create_annotation_overlays_for_pdf(html_content, annotations):
     """
     Create visual overlays for PDF generation (similar to original PDF style).
-    Adds red boxes and margin text boxes.
+    Adds colored boxes and margin text boxes.
     
     Args:
         html_content (str): Original HTML content
@@ -373,93 +377,86 @@ def create_annotation_overlays_for_pdf(html_content, annotations):
                 continue
             
             try:
-                element = soup.select_one(selector)
+                elements = soup.select(selector)
+                if not elements:
+                    continue
+                    
+                element = elements[0]
                 
-                if element:
-                    # Determine color based on type
-                    if annotation['type'] == 'template_variable':
-                        border_color = '#f39c12'
-                        badge_color = '#f39c12'
-                    elif annotation['type'] == 'hyperlink':
-                        border_color = '#e74c3c'
-                        badge_color = '#e74c3c'
-                    else:
-                        border_color = '#3498db'
-                        badge_color = '#3498db'
-                    
-                    # Add colored box around element
-                    current_style = element.get('style', '')
-                    element['style'] = f"{current_style}; border: 2px solid {border_color}; position: relative;"
-                    
-                    # Add number badge
-                    badge = soup.new_tag('span', style=f'''
-                        position: absolute;
-                        top: -10px;
-                        right: -10px;
-                        background: {badge_color};
-                        color: white;
-                        border-radius: 50%;
-                        width: 20px;
-                        height: 20px;
-                        display: inline-flex;
-                        align-items: center;
-                        justify-content: center;
-                        font-size: 12px;
-                        font-weight: bold;
-                        z-index: 100;
-                    ''')
-                    badge.string = str(annotation_counter)
-                    element.append(badge)
-                    
-                    # Add annotation text to margin
-                    margin_item = soup.new_tag('div', style=f'''
-                        margin-bottom: 15px;
-                        padding: 10px;
-                        background: white;
-                        border: 1px solid #ddd;
-                        border-left: 4px solid {badge_color};
-                        border-radius: 4px;
-                    ''')
-                    
-                    # Number
-                    number_span = soup.new_tag('span', style=f'font-weight: bold; color: {badge_color};')
-                    number_span.string = f"{annotation_counter}. "
-                    margin_item.append(number_span)
-                    
-                    # Type and label
-                    type_span = soup.new_tag('div', style='margin-top: 5px; font-weight: 600;')
-                    type_map = {
-                        'form_field': 'Form Field',
-                        'hyperlink': 'Hyperlink',
-                        'template_variable': 'Template Variable'
-                    }
-                    type_text = type_map.get(annotation['type'], 'Unknown')
-                    type_span.string = f"{type_text}: {annotation['label']}"
-                    margin_item.append(type_span)
-                    
-                    # Additional details
-                    if annotation['type'] == 'hyperlink' and annotation.get('url'):
-                        url_span = soup.new_tag('div', style='margin-top: 3px; color: #3498db; word-break: break-all; font-size: 9px;')
-                        url_span.string = f"URL: {annotation['url']}"
-                        margin_item.append(url_span)
-                    
-                    elif annotation['type'] == 'form_field':
-                        if annotation.get('name'):
-                            name_span = soup.new_tag('div', style='margin-top: 3px; color: #666;')
-                            name_span.string = f"Name: {annotation['name']}"
-                            margin_item.append(name_span)
-                        if annotation.get('input_type'):
-                            type_info_span = soup.new_tag('div', style='margin-top: 3px; color: #666;')
-                            type_info_span.string = f"Type: {annotation['input_type']}"
-                            margin_item.append(type_info_span)
-                    
-                    elif annotation['type'] == 'template_variable':
-                        var_span = soup.new_tag('div', style='margin-top: 3px; color: #666; font-family: monospace;')
-                        var_span.string = f"Variable: {annotation.get('variable_name', '')}"
+                # Determine color based on type
+                if annotation['type'] == 'link':
+                    border_color = '#e74c3c'
+                    badge_color = '#e74c3c'
+                    type_label = 'Link'
+                else:  # element
+                    border_color = '#3498db'
+                    badge_color = '#3498db'
+                    type_label = 'Element'
+                
+                # Add colored box around element
+                current_style = element.get('style', '')
+                if current_style and not current_style.endswith(';'):
+                    current_style += ';'
+                element['style'] = f"{current_style} border: 2px solid {border_color}; position: relative; display: inline-block; padding: 2px;"
+                
+                # Add number badge
+                badge = soup.new_tag('span', style=f'''
+                    position: absolute;
+                    top: -10px;
+                    right: -10px;
+                    background: {badge_color};
+                    color: white;
+                    border-radius: 50%;
+                    width: 20px;
+                    height: 20px;
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 12px;
+                    font-weight: bold;
+                    z-index: 100;
+                ''')
+                badge.string = str(annotation_counter)
+                element.append(badge)
+                
+                # Add annotation text to margin
+                margin_item = soup.new_tag('div', style=f'''
+                    margin-bottom: 15px;
+                    padding: 10px;
+                    background: white;
+                    border: 1px solid #ddd;
+                    border-left: 4px solid {badge_color};
+                    border-radius: 4px;
+                ''')
+                
+                # Number and type
+                header_span = soup.new_tag('div', style=f'font-weight: bold; color: {badge_color}; margin-bottom: 5px;')
+                header_span.string = f"{annotation_counter}. {type_label}"
+                margin_item.append(header_span)
+                
+                # Label
+                label_span = soup.new_tag('div', style='margin-top: 5px; font-weight: 600;')
+                label_span.string = annotation['label']
+                margin_item.append(label_span)
+                
+                # Additional details
+                if annotation['type'] == 'link' and annotation.get('url'):
+                    url_span = soup.new_tag('div', style='margin-top: 3px; color: #3498db; word-break: break-all; font-size: 9px;')
+                    url_span.string = f"URL: {annotation['url']}"
+                    margin_item.append(url_span)
+                
+                elif annotation['type'] == 'element':
+                    if annotation.get('variable_name'):
+                        var_span = soup.new_tag('div', style='margin-top: 3px; color: #666; font-family: monospace; font-size: 9px;')
+                        var_span.string = f"Variable: {annotation['variable_name']}"
                         margin_item.append(var_span)
-                    
-                    margin_area.append(margin_item)
-                    annotation_counter += 1
+                    elif annotation.get('name'):
+                        name_span = soup.new_tag('div', style='margin-top: 3px; color: #666; font-size: 9px;')
+                        name_span.string = f"Name: {annotation['name']}"
+                        margin_item.append(name_span)
+                
+                margin_area.append(margin_item)
+                annotation_counter += 1
                     
             except Exception as e:
                 print(f"Error adding overlay for selector {selector}: {e}")
