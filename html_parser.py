@@ -7,6 +7,7 @@ from bs4 import BeautifulSoup
 import re
 import uuid
 
+
 def parse_html_and_detect_elements(html_content):
     """
     Parse HTML content and detect form fields, hyperlinks, and template variables.
@@ -55,7 +56,7 @@ def parse_html_and_detect_elements(html_content):
         
         annotation = {
             "id": str(uuid.uuid4()),
-            "type": "element",  # Changed from "form_field" to "element"
+            "type": "element",
             "element_type": element.name,
             "input_type": input_type,
             "selector": selector,
@@ -88,7 +89,7 @@ def parse_html_and_detect_elements(html_content):
         
         annotation = {
             "id": str(uuid.uuid4()),
-            "type": "link",  # Changed from "hyperlink" to "link"
+            "type": "link",
             "element_type": "a",
             "input_type": "email" if is_email else "url",
             "selector": selector,
@@ -100,6 +101,32 @@ def parse_html_and_detect_elements(html_content):
             "is_email": is_email
         }
         annotations.append(annotation)
+    
+    # Detect variables in href attributes (as part of links)
+    for link in soup.find_all('a', href=True):
+        href = link.get('href', '')
+        
+        # Check if href contains template variables
+        if '{{' in href and '}}' in href:
+            # Extract variable names from href
+            href_vars = re.findall(r'\{\{([a-zA-Z0-9_.]+)\}\}', href)
+            
+            for var_name in href_vars:
+                # Create annotation for this variable
+                annotation = {
+                    "id": str(uuid.uuid4()),
+                    "type": "element",
+                    "element_type": "variable_in_attribute",
+                    "input_type": "url_variable",
+                    "selector": generate_css_selector(link),
+                    "name": var_name,
+                    "element_id": link.get('id', ''),
+                    "label": f"URL Variable: {var_name}",
+                    "text": f"Used in: {link.get_text(strip=True)}",
+                    "variable_name": var_name,
+                    "url": href
+                }
+                annotations.append(annotation)
     
     # Detect template variables (now wrapped in spans)
     variable_spans = soup.find_all('span', {'data-template-var': True})
@@ -120,7 +147,7 @@ def parse_html_and_detect_elements(html_content):
         
         annotation = {
             "id": str(uuid.uuid4()),
-            "type": "element",  # Template variables are also "elements" (blue)
+            "type": "element",
             "element_type": "span",
             "input_type": var_type,
             "selector": selector,
@@ -135,44 +162,73 @@ def parse_html_and_detect_elements(html_content):
     
     return annotations
 
+
 def wrap_template_variables(html_content):
     """
     Wrap all template variables ({{...}}) in span tags for easy detection.
     The span is invisible and doesn't change the visual appearance.
     
+    IMPORTANT: Only wraps variables in TEXT CONTENT, not inside HTML attributes
+    to avoid breaking href, src, style, etc.
+    
     Args:
         html_content (str): Original HTML content
         
     Returns:
-        str: HTML with variables wrapped in spans
+        str: HTML with variables wrapped in spans (only in text nodes)
     """
+    from bs4 import BeautifulSoup, NavigableString
+    
+    soup = BeautifulSoup(html_content, 'html.parser')
+    
     # Pattern for customText blocks: {{customText[...]}}
-    custom_text_pattern = r'(\{\{customText\[(.*?)\]\}\})'
-    
-    def replace_custom_text(match):
-        full_match = match.group(1)  # Full {{customText[...]}}
-        content = match.group(2)  # Just the content inside brackets
-        var_id = f"custom-text-{uuid.uuid4().hex[:8]}"
-        # Create a descriptive name from the content
-        var_name = content[:50] + "..." if len(content) > 50 else content
-        # CRITICAL: Keep the original {{...}} text visible, but wrap it in a span
-        return f'<span class="template-var template-var-custom" data-template-var="{var_name}" data-var-type="customText" id="{var_id}" style="display: inline; background: none; padding: 0; margin: 0;">{full_match}</span>'
-    
-    html_content = re.sub(custom_text_pattern, replace_custom_text, html_content, flags=re.DOTALL)
+    custom_text_pattern = re.compile(r'(\{\{customText\[(.*?)\]\}\})', re.DOTALL)
     
     # Pattern for regular variables: {{variableName}}
-    variable_pattern = r'(\{\{[a-zA-Z0-9_.]+\}\})'
+    variable_pattern = re.compile(r'(\{\{[a-zA-Z0-9_.]+\}\})')
     
-    def replace_variable(match):
-        full_match = match.group(1)  # Full {{variableName}}
-        var_name = full_match[2:-2]  # Extract just the name (remove {{ and }})
-        var_id = f"var-{var_name.replace('.', '-')}-{uuid.uuid4().hex[:8]}"
-        # CRITICAL: Keep the original {{...}} text visible, but wrap it in a span
-        return f'<span class="template-var template-var-simple" data-template-var="{var_name}" data-var-type="variable" id="{var_id}" style="display: inline; background: none; padding: 0; margin: 0;">{full_match}</span>'
+    def wrap_variable_in_span(text):
+        """Wrap variables in a text string with span tags."""
+        
+        def replace_custom_text(match):
+            full_match = match.group(1)  # Full {{customText[...]}}
+            content = match.group(2)  # Just the content inside brackets
+            var_id = f"custom-text-{uuid.uuid4().hex[:8]}"
+            var_name = content[:50] + "..." if len(content) > 50 else content
+            # Escape any quotes in var_name for HTML attribute
+            var_name_escaped = var_name.replace('"', '&quot;')
+            return f'<span class="template-var template-var-custom" data-template-var="{var_name_escaped}" data-var-type="customText" id="{var_id}" style="display: inline; background: none; padding: 0; margin: 0;">{full_match}</span>'
+        
+        def replace_variable(match):
+            full_match = match.group(1)  # Full {{variableName}}
+            var_name = full_match[2:-2]  # Extract just the name (remove {{ and }})
+            var_id = f"var-{var_name.replace('.', '-')}-{uuid.uuid4().hex[:8]}"
+            return f'<span class="template-var template-var-simple" data-template-var="{var_name}" data-var-type="variable" id="{var_id}" style="display: inline; background: none; padding: 0; margin: 0;">{full_match}</span>'
+        
+        # First replace customText blocks
+        text = custom_text_pattern.sub(replace_custom_text, text)
+        # Then replace regular variables
+        text = variable_pattern.sub(replace_variable, text)
+        
+        return text
     
-    html_content = re.sub(variable_pattern, replace_variable, html_content)
+    # Find all text nodes and wrap variables in them
+    # We need to be careful to only process actual text content, not attributes
+    for element in soup.find_all(text=True):
+        # Skip if this is inside a script or style tag
+        if element.parent.name in ['script', 'style']:
+            continue
+        
+        # Check if this text node contains any variables
+        if '{{' in element and '}}' in element:
+            # Wrap variables in this text
+            new_text = wrap_variable_in_span(str(element))
+            
+            # Replace the text node with parsed HTML
+            new_soup = BeautifulSoup(new_text, 'html.parser')
+            element.replace_with(new_soup)
     
-    return html_content
+    return str(soup)
 
 
 def generate_css_selector(element):
@@ -214,6 +270,7 @@ def generate_css_selector(element):
         selector += f'[name="{element.get("name")}"]'
     
     return selector
+
 
 def inject_visual_annotations(html_content, annotations):
     """
@@ -336,6 +393,12 @@ def inject_visual_annotations(html_content, annotations):
             continue
     
     return str(soup)
+
+
+def create_annotation_overlays_for_pdf(html_content, annotations):
+    """
+    Create visual overlays for PDF generation
+
 
 def create_annotation_overlays_for_pdf(html_content, annotations):
     """
