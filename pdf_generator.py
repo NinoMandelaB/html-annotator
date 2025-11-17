@@ -3,8 +3,7 @@ PDF Generator Module
 Converts HTML email templates with annotations to PDF format.
 """
 
-from weasyprint import HTML, CSS
-from io import BytesIO
+import pdfkit
 from html_parser import create_annotation_overlays_for_pdf
 
 def convert_annotated_html_to_pdf(html_content, annotations):
@@ -21,34 +20,26 @@ def convert_annotated_html_to_pdf(html_content, annotations):
     # Create HTML with annotation overlays (boxes and margin text)
     annotated_html = create_annotation_overlays_for_pdf(html_content, annotations)
     
-    # Additional CSS for PDF rendering
-    pdf_css = CSS(string='''
-        @page {
-            size: A4 landscape;
-            margin: 1cm;
-        }
-        
-        body {
-            font-family: Arial, sans-serif;
-            font-size: 12px;
-        }
-        
-        /* Ensure proper page breaks */
-        .annotation-highlight-form,
-        .annotation-highlight-link {
-            page-break-inside: avoid;
-        }
-        
-        /* Print-specific styles */
-        @media print {
-            body {
-                background: white;
-            }
-        }
-    ''')
+    # Configure pdfkit options
+    options = {
+        'page-size': 'A4',
+        'orientation': 'Landscape',
+        'margin-top': '10mm',
+        'margin-right': '10mm',
+        'margin-bottom': '10mm',
+        'margin-left': '10mm',
+        'encoding': "UTF-8",
+        'enable-local-file-access': None,
+        'no-stop-slow-scripts': None,
+        'quiet': ''
+    }
     
-    # Create PDF from HTML
-    html_obj = HTML(string=annotated_html)
-    pdf_bytes = html_obj.write_pdf(stylesheets=[pdf_css])
-    
-    return pdf_bytes
+    try:
+        # Create PDF from HTML
+        pdf_bytes = pdfkit.from_string(annotated_html, False, options=options)
+        return pdf_bytes
+    except Exception as e:
+        print(f"Error generating PDF: {e}")
+        # Fallback without options if there's an error
+        pdf_bytes = pdfkit.from_string(annotated_html, False)
+        return pdf_bytes
