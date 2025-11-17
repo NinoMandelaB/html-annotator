@@ -109,8 +109,8 @@
                     <div class="mb-3">
                         <label class="form-label">Type</label>
                         <select class="form-select" id="editType" disabled>
-                            <option value="form_field">Form Field</option>
-                            <option value="hyperlink">Hyperlink</option>
+                            <option value="element">Element</option>
+                            <option value="link">Link</option>
                         </select>
                     </div>
                     <div class="mb-3" id="urlFieldGroup">
@@ -118,7 +118,7 @@
                         <input type="text" class="form-control" id="editUrl">
                     </div>
                     <div class="mb-3" id="nameFieldGroup">
-                        <label class="form-label">Field Name</label>
+                        <label class="form-label">Field Name / Variable</label>
                         <input type="text" class="form-control" id="editName">
                     </div>
                 </div>
@@ -146,17 +146,17 @@
                     <div class="mb-3">
                         <label class="form-label">Type</label>
                         <select class="form-select" id="addType" onchange="toggleAddFields()">
-                            <option value="form_field">Form Field</option>
-                            <option value="hyperlink">Hyperlink</option>
+                            <option value="element">Element</option>
+                            <option value="link">Link</option>
                         </select>
                     </div>
-                    <div class="mb-3" id="addUrlGroup">
+                    <div class="mb-3" id="addUrlGroup" style="display: none;">
                         <label class="form-label">URL</label>
                         <input type="text" class="form-control" id="addUrl" placeholder="https://example.com">
                     </div>
                     <div class="mb-3" id="addNameGroup">
-                        <label class="form-label">Field Name</label>
-                        <input type="text" class="form-control" id="addName" placeholder="field_name">
+                        <label class="form-label">Field Name / Variable</label>
+                        <input type="text" class="form-control" id="addName" placeholder="field_name or variable_name">
                     </div>
                     <div class="mb-3">
                         <label class="form-label">CSS Selector</label>

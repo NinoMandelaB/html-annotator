@@ -79,6 +79,12 @@ function setupIframeInteraction() {
     const iframe = document.getElementById('previewFrame');
     const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
     
+    // CRITICAL: Inject CSS into iframe AFTER it loads
+    injectAnnotationCSS(iframeDoc);
+    
+    // CRITICAL: Apply visual highlights to all annotated elements
+    applyVisualHighlights(iframeDoc);
+    
     // Add click handler for add mode
     iframeDoc.addEventListener('click', function(e) {
         if (isAddMode) {
@@ -103,6 +109,90 @@ function setupIframeInteraction() {
         }
     });
 }
+
+// NEW FUNCTION: Inject annotation CSS into iframe
+function injectAnnotationCSS(iframeDoc) {
+    const style = iframeDoc.createElement('style');
+    style.id = 'annotation-styles';
+    style.textContent = `
+        /* Annotation Highlight Styles */
+        .annotation-highlight-element {
+            outline: 3px solid #3498db !important;
+            outline-offset: 2px !important;
+            position: relative !important;
+            box-shadow: 0 0 10px rgba(52, 152, 219, 0.5) !important;
+            background-color: rgba(52, 152, 219, 0.1) !important;
+        }
+        
+        .annotation-highlight-link {
+            outline: 3px solid #e74c3c !important;
+            outline-offset: 2px !important;
+            position: relative !important;
+            box-shadow: 0 0 10px rgba(231, 76, 60, 0.5) !important;
+            background-color: rgba(231, 76, 60, 0.1) !important;
+        }
+        
+        /* Specific styling for inline template variables */
+        span.annotation-highlight-element[data-template-var] {
+            display: inline !important;
+            padding: 2px 4px !important;
+            border-radius: 3px !important;
+            background-color: rgba(52, 152, 219, 0.15) !important;
+        }
+    `;
+    
+    // Remove existing annotation styles if any
+    const existingStyle = iframeDoc.getElementById('annotation-styles');
+    if (existingStyle) {
+        existingStyle.remove();
+    }
+    
+    iframeDoc.head.appendChild(style);
+    console.log('✅ Annotation CSS injected into iframe');
+}
+
+// NEW FUNCTION: Apply visual highlights to annotated elements
+function applyVisualHighlights(iframeDoc) {
+    let highlightedCount = 0;
+    
+    currentAnnotations.forEach(annotation => {
+        const selector = annotation.selector;
+        if (!selector) return;
+        
+        try {
+            // Find element in iframe using CSS selector
+            const element = iframeDoc.querySelector(selector);
+            
+            if (element) {
+                // Add annotation ID
+                element.setAttribute('data-annotation-id', annotation.id);
+                
+                // Determine highlight class based on type
+                const highlightClass = annotation.type === 'link' 
+                    ? 'annotation-highlight-link' 
+                    : 'annotation-highlight-element';
+                
+                // Add highlight class
+                element.classList.add(highlightClass);
+                
+                // Ensure position relative for potential badges
+                if (!element.style.position || element.style.position === 'static') {
+                    element.style.position = 'relative';
+                }
+                
+                highlightedCount++;
+                console.log(`✅ Highlighted ${annotation.type}: ${selector}`);
+            } else {
+                console.warn(`⚠️ Element not found for selector: ${selector}`);
+            }
+        } catch (error) {
+            console.error(`❌ Error highlighting ${selector}:`, error);
+        }
+    });
+    
+    console.log(`✅ Applied ${highlightedCount} highlights out of ${currentAnnotations.length} annotations`);
+}
+
 
 // Handle element click in add mode
 function handleElementClick(element) {
@@ -190,14 +280,17 @@ function createAnnotationItem(annotation, index) {
     item.dataset.annotationId = annotation.id;
     item.dataset.index = index;
     
-    const typeClass = annotation.type === 'form_field' ? 'annotation-type-form' : 'annotation-type-link';
-    const typeText = annotation.type === 'form_field' ? 'Form Field' : 'Link';
+    // FIX: Use correct type names
+    const typeClass = annotation.type === 'link' ? 'annotation-type-link' : 'annotation-type-form';
+    const typeText = annotation.type === 'link' ? 'Link' : 'Element';
     
     let detailsHTML = '';
-    if (annotation.type === 'hyperlink' && annotation.url) {
+    if (annotation.type === 'link' && annotation.url) {
         detailsHTML = `<div><strong>URL:</strong> ${annotation.url}</div>`;
-    } else if (annotation.type === 'form_field') {
-        if (annotation.name) {
+    } else if (annotation.type === 'element') {
+        if (annotation.variable_name) {
+            detailsHTML += `<div><strong>Variable:</strong> ${annotation.variable_name}</div>`;
+        } else if (annotation.name) {
             detailsHTML += `<div><strong>Name:</strong> ${annotation.name}</div>`;
         }
         if (annotation.input_type) {
@@ -324,7 +417,7 @@ function editAnnotation(annotationId) {
     document.getElementById('editLabel').value = annotation.label;
     document.getElementById('editType').value = annotation.type;
     
-    if (annotation.type === 'hyperlink') {
+    if (annotation.type === 'link') {
         document.getElementById('urlFieldGroup').style.display = 'block';
         document.getElementById('nameFieldGroup').style.display = 'none';
         document.getElementById('editUrl').value = annotation.url || '';
@@ -347,7 +440,7 @@ async function saveAnnotationEdit() {
     // Update annotation
     annotation.label = document.getElementById('editLabel').value;
     
-    if (annotation.type === 'hyperlink') {
+    if (annotation.type === 'link') {
         annotation.url = document.getElementById('editUrl').value;
     } else {
         annotation.name = document.getElementById('editName').value;
@@ -362,6 +455,20 @@ async function saveAnnotationEdit() {
     // Close modal
     bootstrap.Modal.getInstance(document.getElementById('editModal')).hide();
 }
+
+// Toggle add modal fields based on type
+function toggleAddFields() {
+    const type = document.getElementById('addType').value;
+    
+    if (type === 'link') {
+        document.getElementById('addUrlGroup').style.display = 'block';
+        document.getElementById('addNameGroup').style.display = 'none';
+    } else {
+        document.getElementById('addUrlGroup').style.display = 'none';
+        document.getElementById('addNameGroup').style.display = 'block';
+    }
+}
+
 
 // Delete annotation
 async function deleteAnnotation(annotationId) {
