@@ -138,6 +138,7 @@ def parse_html_and_detect_elements(html_content):
 def wrap_template_variables(html_content):
     """
     Wrap all template variables ({{...}}) in span tags for easy detection.
+    The span is invisible and doesn't change the visual appearance.
     
     Args:
         html_content (str): Original HTML content
@@ -146,28 +147,33 @@ def wrap_template_variables(html_content):
         str: HTML with variables wrapped in spans
     """
     # Pattern for customText blocks: {{customText[...]}}
-    custom_text_pattern = r'\{\{customText\[(.*?)\]\}\}'
+    custom_text_pattern = r'(\{\{customText\[(.*?)\]\}\})'
     
     def replace_custom_text(match):
-        content = match.group(1)
+        full_match = match.group(1)  # Full {{customText[...]}}
+        content = match.group(2)  # Just the content inside brackets
         var_id = f"custom-text-{uuid.uuid4().hex[:8]}"
         # Create a descriptive name from the content
         var_name = content[:50] + "..." if len(content) > 50 else content
-        return f'<span class="template-var template-var-custom" data-template-var="{var_name}" data-var-type="customText" id="{var_id}">{match.group(0)}</span>'
+        # CRITICAL: Keep the original {{...}} text visible, but wrap it in a span
+        return f'<span class="template-var template-var-custom" data-template-var="{var_name}" data-var-type="customText" id="{var_id}" style="display: inline; background: none; padding: 0; margin: 0;">{full_match}</span>'
     
     html_content = re.sub(custom_text_pattern, replace_custom_text, html_content, flags=re.DOTALL)
     
     # Pattern for regular variables: {{variableName}}
-    variable_pattern = r'\{\{([a-zA-Z0-9_.]+)\}\}'
+    variable_pattern = r'(\{\{[a-zA-Z0-9_.]+\}\})'
     
     def replace_variable(match):
-        var_name = match.group(1)
+        full_match = match.group(1)  # Full {{variableName}}
+        var_name = full_match[2:-2]  # Extract just the name (remove {{ and }})
         var_id = f"var-{var_name.replace('.', '-')}-{uuid.uuid4().hex[:8]}"
-        return f'<span class="template-var template-var-simple" data-template-var="{var_name}" data-var-type="variable" id="{var_id}">{match.group(0)}</span>'
+        # CRITICAL: Keep the original {{...}} text visible, but wrap it in a span
+        return f'<span class="template-var template-var-simple" data-template-var="{var_name}" data-var-type="variable" id="{var_id}" style="display: inline; background: none; padding: 0; margin: 0;">{full_match}</span>'
     
     html_content = re.sub(variable_pattern, replace_variable, html_content)
     
     return html_content
+
 
 def generate_css_selector(element):
     """
