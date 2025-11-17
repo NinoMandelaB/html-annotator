@@ -10,22 +10,32 @@ from werkzeug.utils import secure_filename
 from html_parser import parse_html_and_detect_elements, inject_visual_annotations
 from pdf_generator import convert_annotated_html_to_pdf
 from datetime import timedelta
+from flask_session import Session
+import redis
 
 # Initialize the Flask application
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "your_secret_key_change_in_production_" + str(uuid.uuid4()))
 
-# Session configuration for Railway
-app.config['SESSION_TYPE'] = 'filesystem'
+# Session configuration for Railway with Redis
+app.config['SESSION_TYPE'] = 'redis'
 app.config['SESSION_PERMANENT'] = True
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=2)
-app.config['SESSION_COOKIE_SECURE'] = True  # For HTTPS on Railway
+app.config['SESSION_COOKIE_SECURE'] = True
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+
+# Configure Redis connection
+redis_url = os.environ.get('REDIS_URL', 'redis://localhost:6379')
+app.config['SESSION_REDIS'] = redis.from_url(redis_url)
+
+# Initialize session
+Session(app)
 
 # Configuration
 ALLOWED_EXTENSIONS = {'html', 'htm'}
 MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB max file size
+
 
 def allowed_file(filename):
     """Check if the file has an allowed extension."""
