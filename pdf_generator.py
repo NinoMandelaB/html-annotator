@@ -38,8 +38,23 @@ def convert_annotated_html_to_pdf(html_content, annotations):
         # Create PDF from HTML
         pdf_bytes = pdfkit.from_string(annotated_html, False, options=options)
         return pdf_bytes
+    except OSError as e:
+        # wkhtmltopdf binary not found or path issue
+        print(f"OSError generating PDF (wkhtmltopdf issue): {e}")
+        # Try with minimal options
+        try:
+            pdf_bytes = pdfkit.from_string(annotated_html, False, options={'encoding': 'UTF-8'})
+            return pdf_bytes
+        except Exception as e2:
+            print(f"Fallback PDF generation also failed: {e2}")
+            raise Exception(f"PDF generation failed: wkhtmltopdf may not be properly installed. Error: {str(e)}")
     except Exception as e:
         print(f"Error generating PDF: {e}")
-        # Fallback without options if there's an error
-        pdf_bytes = pdfkit.from_string(annotated_html, False)
-        return pdf_bytes
+        # Try without options as last resort
+        try:
+            pdf_bytes = pdfkit.from_string(annotated_html, False)
+            return pdf_bytes
+        except Exception as e2:
+            print(f"Final fallback failed: {e2}")
+            raise Exception(f"PDF generation failed: {str(e)}")
+

@@ -163,16 +163,13 @@ def get_file(file_id):
     if not file_data:
         return jsonify({"error": "File not found"}), 404
     
-    # Inject visual annotations for preview
-    annotated_html = inject_visual_annotations(
-        file_data['html_content'],
-        file_data['annotations']
-    )
-    
+    # FIXED: Return ORIGINAL HTML without server-side injection
+    # Let JavaScript handle ALL visual highlights in the iframe
     return jsonify({
-        "html": annotated_html,
+        "html": file_data['html_content'],  # Changed from inject_visual_annotations()
         "annotations": file_data['annotations']
     })
+
 
 @app.route("/api/update_annotations", methods=["POST"])
 def update_annotations():
