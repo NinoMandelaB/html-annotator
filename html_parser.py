@@ -397,11 +397,6 @@ def inject_visual_annotations(html_content, annotations):
 
 def create_annotation_overlays_for_pdf(html_content, annotations):
     """
-    Create visual overlays for PDF generation
-
-
-def create_annotation_overlays_for_pdf(html_content, annotations):
-    """
     Create visual overlays for PDF generation (similar to original PDF style).
     Adds colored boxes and margin text boxes.
     
