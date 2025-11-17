@@ -9,10 +9,19 @@ import uuid
 from werkzeug.utils import secure_filename
 from html_parser import parse_html_and_detect_elements, inject_visual_annotations
 from pdf_generator import convert_annotated_html_to_pdf
+from datetime import timedelta
 
 # Initialize the Flask application
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "your_secret_key_change_in_production")
+app.secret_key = os.environ.get("SECRET_KEY", "your_secret_key_change_in_production_" + str(uuid.uuid4()))
+
+# Session configuration for Railway
+app.config['SESSION_TYPE'] = 'filesystem'
+app.config['SESSION_PERMANENT'] = True
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=2)
+app.config['SESSION_COOKIE_SECURE'] = True  # For HTTPS on Railway
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
 # Configuration
 ALLOWED_EXTENSIONS = {'html', 'htm'}
@@ -27,6 +36,8 @@ def index():
     """
     Main route - displays the upload form.
     """
+    # Clear any error messages from session
+    session.pop('_flashes', None)
     return render_template("index.html")
 
 @app.route("/upload", methods=["POST"])
@@ -35,21 +46,29 @@ def upload():
     Handle file upload and initial annotation detection.
     Returns a session ID and redirects to the editor.
     """
+    print("Upload endpoint called")  # Debug
+    print(f"request.files: {request.files}")  # Debug
+    print(f"request.files keys: {list(request.files.keys())}")  # Debug
+    
     # Check if files were included in the request
     if "files" not in request.files:
+        print("No 'files' in request.files")  # Debug
         flash("No files selected")
         return redirect(url_for('index'))
 
     # Get list of all uploaded files
     files = request.files.getlist("files")
+    print(f"Number of files: {len(files)}")  # Debug
 
     # Check if no files were selected or all files are empty
     if not files or all(file.filename == "" for file in files):
+        print("Files list is empty or all filenames are empty")  # Debug
         flash("No files selected")
         return redirect(url_for('index'))
 
     # Validate that all uploaded files are HTML
     for file in files:
+        print(f"Processing file: {file.filename}")  # Debug
         if not allowed_file(file.filename):
             flash(f"File {file.filename} is not an HTML file")
             return redirect(url_for('index'))
@@ -66,8 +85,12 @@ def upload():
             html_content = file.read().decode('utf-8', errors='ignore')
             original_filename = secure_filename(file.filename)
             
+            print(f"Read {len(html_content)} characters from {original_filename}")  # Debug
+            
             # Parse HTML and detect form fields and hyperlinks
             annotations = parse_html_and_detect_elements(html_content)
+            
+            print(f"Detected {len(annotations)} annotations in {original_filename}")  # Debug
             
             # Store file data
             file_data = {
@@ -81,11 +104,18 @@ def upload():
         # Store in session
         session['files_data'] = all_files_data
         session['session_id'] = session_id
+        session.permanent = True
+        
+        print(f"Stored {len(all_files_data)} files in session")  # Debug
+        print(f"Session ID: {session_id}")  # Debug
         
         # Redirect to editor
         return redirect(url_for('editor'))
         
     except Exception as e:
+        print(f"Error in upload: {str(e)}")  # Debug
+        import traceback
+        traceback.print_exc()
         flash(f"Error processing files: {str(e)}")
         return redirect(url_for('index'))
 
@@ -94,12 +124,18 @@ def editor():
     """
     Display the annotation editor interface.
     """
+    print("Editor endpoint called")  # Debug
+    print(f"Session keys: {list(session.keys())}")  # Debug
+    print(f"'files_data' in session: {'files_data' in session}")  # Debug
+    
     # Check if we have files in session
     if 'files_data' not in session:
+        print("No files_data in session, redirecting to index")  # Debug
         flash("No files to edit. Please upload files first.")
         return redirect(url_for('index'))
     
     files_data = session['files_data']
+    print(f"Rendering editor with {len(files_data)} files")  # Debug
     
     return render_template("editor.html", files_data=files_data)
 
@@ -222,8 +258,7 @@ def generate_pdfs():
     Returns a ZIP file containing all annotated PDFs.
     """
     if 'files_data' not in session:
-        flash("No files to process. Please upload files first.")
-        return redirect(url_for('index'))
+        return jsonify({"error": "No files to process"}), 404
     
     data = request.get_json()
     selected_file_ids = data.get('selected_files', [])
@@ -264,6 +299,9 @@ def generate_pdfs():
         )
         
     except Exception as e:
+        print(f"Error generating PDFs: {str(e)}")  # Debug
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": f"Error generating PDFs: {str(e)}"}), 500
 
 @app.route("/clear_session", methods=["POST"])
@@ -276,4 +314,4 @@ def clear_session():
 
 # Run the application
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=True)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=False)
