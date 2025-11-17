@@ -51,30 +51,31 @@ async function loadFile(fileId) {
             return;
         }
         
-        // Store annotations BEFORE loading iframe
+        // Store annotations FIRST (before iframe loads)
         currentAnnotations = data.annotations;
         displayAnnotations();
         
         // Load HTML into iframe
         const iframe = document.getElementById('previewFrame');
         
-        // CRITICAL FIX: Clear previous onload handler
+        // CRITICAL FIX: Clear any previous onload handler
         iframe.onload = null;
         
-        // Set content
+        // Set the HTML content
         iframe.srcdoc = data.html;
         
-        // CRITICAL FIX: Setup interaction with delay for DOM ready
+        // CRITICAL FIX: Setup interaction AFTER iframe loads with delay
         iframe.onload = function() {
-            console.log('🔵 Iframe loaded');
+            console.log('🔵 Iframe loaded, waiting for DOM...');
+            // Add delay to ensure iframe DOM is fully ready
             setTimeout(() => {
                 try {
                     setupIframeInteraction();
-                    console.log('✅ Setup complete');
+                    console.log('✅ Visual highlights applied');
                 } catch (error) {
-                    console.error('❌ Setup error:', error);
+                    console.error('❌ Error applying highlights:', error);
                 }
-            }, 100);
+            }, 150); // Increased to 150ms for reliability
         };
         
         // Update title
@@ -86,6 +87,7 @@ async function loadFile(fileId) {
         showError('Failed to load file');
     }
 }
+
 
 
 // Setup click interaction in iframe
