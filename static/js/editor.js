@@ -31,42 +31,55 @@ function setupEventListeners() {
 // Load a file and its annotations
 async function loadFile(fileId) {
     try {
-        // ... existing code ...
+        // Update active state in file list
+        document.querySelectorAll('.file-item').forEach(item => {
+            item.classList.remove('active');
+        });
+        document.querySelector(`[data-file-id="${fileId}"]`).classList.add('active');
+        
+        currentFileId = fileId;
+        
+        // Show loading state
+        document.getElementById('annotationList').innerHTML = '<div class="loading"><i class="fas fa-spinner"></i></div>';
+        
+        // Fetch file data
+        const response = await fetch(`/api/get_file/${fileId}`);
+        const data = await response.json();
+        
+        if (data.error) {
+            showError('Failed to load file');
+            return;
+        }
+        
+        // Store annotations BEFORE loading iframe
+        currentAnnotations = data.annotations;
+        displayAnnotations();
         
         // Load HTML into iframe
         const iframe = document.getElementById('previewFrame');
         
-        // IMPORTANT: Clear any previous onload handlers
+        // CRITICAL FIX: Clear previous onload handler
         iframe.onload = null;
         
-        // Set new content
+        // Set content
         iframe.srcdoc = data.html;
         
-        // Wait for iframe to load with proper error handling
+        // CRITICAL FIX: Setup interaction with delay for DOM ready
         iframe.onload = function() {
-            console.log('🔵 Iframe loaded, setting up interaction...');
-            try {
-                setupIframeInteraction();
-                console.log('✅ Setup iframe interaction completed');
-            } catch (error) {
-                console.error('❌ Error in setupIframeInteraction:', error);
-            }
+            console.log('🔵 Iframe loaded');
+            setTimeout(() => {
+                try {
+                    setupIframeInteraction();
+                    console.log('✅ Setup complete');
+                } catch (error) {
+                    console.error('❌ Setup error:', error);
+                }
+            }, 100);
         };
         
-        // Fallback: Also try after a short delay in case onload doesn't fire
-        setTimeout(() => {
-            console.log('🔵 Fallback: Attempting to setup interaction after delay');
-            try {
-                const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-                if (iframeDoc.readyState === 'complete') {
-                    setupIframeInteraction();
-                }
-            } catch (e) {
-                console.error('❌ Fallback setup failed:', e);
-            }
-        }, 500);
-        
-        // ... rest of existing code ...
+        // Update title
+        const fileName = document.querySelector(`[data-file-id="${fileId}"] .file-name`).textContent;
+        document.getElementById('previewTitle').textContent = fileName;
         
     } catch (error) {
         console.error('Error loading file:', error);
