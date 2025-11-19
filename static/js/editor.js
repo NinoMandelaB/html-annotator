@@ -531,6 +531,9 @@ function editAnnotation(annotationId) {
         document.getElementById('urlFieldGroup').style.display = 'none';
         document.getElementById('nameFieldGroup').style.display = 'block';
         document.getElementById('editName').value = annotation.name || '';
+        
+    // Load comments
+    document.getElementById('annotationComments').value = annotation.comments || '';
     }
     
     // Show modal
@@ -550,6 +553,9 @@ async function saveAnnotationEdit() {
         annotation.url = document.getElementById('editUrl').value;
     } else {
         annotation.name = document.getElementById('editName').value;
+        
+    // Save comments
+    annotation.comments = document.getElementById('annotationComments').value;
     }
     
     // Save to server
