@@ -125,9 +125,65 @@ def parse_html_and_detect_elements(html_content):
         annotations.append(annotation)
 
     
-   
+    # Step 3: Detect form fields (inputs, textareas, selects, buttons)
+    form_elements = soup.find_all(['input', 'textarea', 'select', 'button'])
     
-    # Step 3: Detect hyperlinks (LAST, to capture everything including variables in href)
+    for element in form_elements:
+        # Skip hidden inputs
+        input_type = element.get('type', 'text')
+        if input_type == 'hidden':
+            continue
+        
+        # Generate unique element key to avoid duplicates
+        element_key = f"{element.name}_{element.get('id', '')}_{element.get('name', '')}"
+        if element_key in annotated_elements:
+            continue
+        annotated_elements.add(element_key)
+        
+        # Extract element information
+        element_name = element.get('name', '')
+        element_id = element.get('id', '')
+        element_placeholder = element.get('placeholder', '')
+        element_value = element.get('value', '')
+        element_text = element.get_text(strip=True)
+        
+        # Create a label for the annotation
+        if element.name == 'button' or input_type == 'submit':
+            # Check if button text contains variables
+            if '{{' in element_text:
+                label = f"Button: {element_text} (contains variables)"
+            else:
+                label = f"Button: {element_text or element_value or 'Submit'}"
+        elif element.name == 'select':
+            options = element.find_all('option')
+            option_text = f" ({len(options)} options)" if options else ""
+            label = f"Dropdown: {element_name or element_id or 'unnamed'}{option_text}"
+        elif element.name == 'textarea':
+            label = f"Textarea: {element_name or element_id or element_placeholder or 'unnamed'}"
+        else:
+            label = f"Input ({input_type}): {element_name or element_id or element_placeholder or 'unnamed'}"
+        
+        # Generate CSS selector for the element
+        selector = generate_css_selector(element)
+        
+        annotation = {
+            "id": str(uuid.uuid4()),
+            "type": "element",
+            "element_type": element.name,
+            "input_type": input_type,
+            "selector": selector,
+            "name": element_name,
+            "element_id": element_id,
+            "label": label,
+            "placeholder": element_placeholder,
+            "value": element_value,
+            "required": element.has_attr('required'),
+            "url": None,
+            "comments": ""  # New field for user comments
+        }
+        annotations.append(annotation)
+    
+    # Step 4: Detect hyperlinks (LAST, to capture everything including variables in href)
     links = soup.find_all('a', href=True)
     
     for link in links:
