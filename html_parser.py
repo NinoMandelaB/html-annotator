@@ -56,19 +56,21 @@ def parse_html_and_detect_elements(html_content):
         # Step 1.5: Detect ##variable## and [text] patterns (for blue highlighting)
     # These patterns are used in email templates to mark dynamic content
     
-    # Pattern 1: ##variableName## format
+    # Pattern 1: ##variableName## format  
+    # CREATE ANNOTATION FOR EVERY INSTANCE (no deduplication)
     hash_variable_pattern = re.compile(r'##([^#]+)##')
     hash_matches = hash_variable_pattern.finditer(str(soup))
     
+    instance_counter = {}  # Track instances for unique IDs
     for match in hash_matches:
         var_content = match.group(1)
         full_text = match.group(0)  # ##variableName##
         
-        # Skip if already annotated
-        if var_content in annotated_elements:
-            continue
-        
-        annotated_elements.add(var_content)
+        # Create unique instance ID
+        if var_content not in instance_counter:
+            instance_counter[var_content] = 0
+        instance_counter[var_content] += 1
+        instance_id = f"{var_content}_inst{instance_counter[var_content]}"
         
         annotation = {
             "id": str(uuid.uuid4()),
@@ -82,23 +84,29 @@ def parse_html_and_detect_elements(html_content):
             "text": full_text,
             "variable_name": var_content,
             "url": None,
-            "comments": ""  # New field for user comments
+            "comments": ""
         }
         annotations.append(annotation)
+
     
-    # Pattern 2: [text] format (square brackets)
+        # Pattern 2: [text] format (square brackets)
+    # CREATE ANNOTATION FOR EVERY INSTANCE (no deduplication)
     bracket_pattern = re.compile(r'\[([^\]]+)\]')
     bracket_matches = bracket_pattern.finditer(str(soup))
     
+    bracket_counter = {}  # Track instances for unique IDs
     for match in bracket_matches:
         bracket_content = match.group(1)
         full_text = match.group(0)  # [text]
         
-        # Skip if already annotated or if it looks like HTML attribute
-        if bracket_content in annotated_elements or '=' in bracket_content:
+        # Skip if it looks like HTML attribute
+        if '=' in bracket_content or '<' in bracket_content:
             continue
         
-        annotated_elements.add(bracket_content)
+        # Create unique instance ID
+        if bracket_content not in bracket_counter:
+            bracket_counter[bracket_content] = 0
+        bracket_counter[bracket_content] += 1
         
         annotation = {
             "id": str(uuid.uuid4()),
@@ -112,55 +120,10 @@ def parse_html_and_detect_elements(html_content):
             "text": full_text,
             "variable_name": bracket_content,
             "url": None,
-            "comments": ""  # New field for user comments
+            "comments": ""
         }
         annotations.append(annotation)
 
-
-    
-    # Step 2: Detect standalone template variables (not inside customText)
-    # Find all {{variableName}} that are NOT part of customText blocks
-    html_without_custom = custom_text_pattern.sub('', html_content)  # Remove customText blocks
-    variable_pattern = re.compile(r'\{\{([a-zA-Z0-9_.]+)\}\}')
-    
-    # Parse the HTML to find where these variables appear
-    soup_clean = BeautifulSoup(html_without_custom, 'html.parser')
-    
-    # Find variables in TEXT CONTENT (not attributes)
-    for text_node in soup_clean.find_all(text=True):
-        if text_node.parent.name in ['script', 'style']:
-            continue
-            
-        variables_in_text = variable_pattern.findall(str(text_node))
-        for var_name in variables_in_text:
-            # Check if this variable is inside a link or button
-            parent_link = text_node.find_parent(['a', 'button'])
-            
-            if parent_link:
-                # Variable is inside a link/button, it will be handled with the link
-                continue
-            
-            # Check if we haven't already annotated this exact variable
-            if var_name in annotated_elements:
-                continue
-            
-            annotated_elements.add(var_name)
-            
-            annotation = {
-                "id": str(uuid.uuid4()),
-                "type": "element",
-                "element_type": "variable",
-                "input_type": "variable",
-                "selector": None,
-                "name": var_name,
-                "element_id": "",
-                "label": f"Variable: {var_name}",
-                "text": f"{{{{{var_name}}}}}",
-                "variable_name": var_name,
-                "url": None,
-                "comments": ""  # New field for user comments
-            }
-            annotations.append(annotation)
     
     # Step 3: Detect form fields (inputs, textareas, selects, buttons)
     form_elements = soup.find_all(['input', 'textarea', 'select', 'button'])
