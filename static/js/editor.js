@@ -250,8 +250,6 @@ function applyVisualHighlights(iframeDoc) {
                                 parent.insertBefore(afterNode, node);
                                 parent.removeChild(node);
                                 
-                                element = span;
-                                break;
                             }
                         }
                     }
