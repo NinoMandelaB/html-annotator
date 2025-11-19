@@ -209,7 +209,7 @@ def parse_html_and_detect_elements(html_content):
 
 
 211
-(element):
+def generate_css_selector(element):
     """
     Generate a unique CSS selector for an element.
     Prioritizes ID, then combination of tag + class, then tag + attributes.
