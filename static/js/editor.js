@@ -189,7 +189,22 @@ function applyVisualHighlights(iframeDoc) {
         
         try {
             // Find element in iframe using CSS selector
-            const element = iframeDoc.querySelector(selector);
+            // IMPROVED: Handle custom selectors for email templates
+            let element = null;
+            
+            // Check for custom :linktext() selector
+            if (selector.includes(':linktext(')) {
+                const match = selector.match(/:linktext\("(.+?)"\)/);
+                if (match) {
+                    const linkText = match[1];
+                    // Find link by text content
+                    const links = Array.from(iframeDoc.querySelectorAll('a'));
+                    element = links.find(a => a.textContent.trim() === linkText.trim());
+                }
+            } else {
+                // Use standard querySelector
+                element = iframeDoc.querySelector(selector);
+            }            ;
             
             if (element) {
                 // Add annotation ID
