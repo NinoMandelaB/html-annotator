@@ -208,7 +208,8 @@ def parse_html_and_detect_elements(html_content):
     return annotations
 
 
-def generate_css_selector(element):
+211
+(element):
     """
     Generate a unique CSS selector for an element.
     Prioritizes ID, then combination of tag + class, then tag + attributes.
@@ -239,11 +240,25 @@ def generate_css_selector(element):
     elif element.get('name'):
         selector += f'[name="{element.get("name")}"]'
     
-    # Add href for links if no other identifier
-    elif element.name == 'a' and element.get('href'):
-        href = element.get('href')
-        if not href.startswith('{{'):  # Only use if not a variable
-            selector += f'[href="{href[:50]}"]'
+    # Add href for links if no other identifier - IMPROVED FOR EMAIL TEMPLATES
+    elif element.name == 'a':
+        link_text = element.get_text(strip=True)
+        # Priority 1: Use link text if it's unique and not too long
+        if link_text and len(link_text) <= 50:
+            # Use special notation for JS text matching
+            selector += f':linktext("{link_text}")'
+        elif element.get('href'):
+            # Priority 2: Use partial href matching (extract domain or safe part)
+            href = element.get('href')
+            # Extract domain or first part before template variables
+            if '{{' in href:
+                # Get the part before the first variable
+                safe_part = href.split('{{')[0].rstrip('?&=')
+                if len(safe_part) > 10:  # Only use if meaningful
+                    selector += f'[href^="{safe_part}"]'
+            else:
+                # No variables, use normal href matching
+                selector += f'[href="{href[:100]}"]'
     
     return selector
 
@@ -258,7 +273,8 @@ def inject_visual_annotations(html_content, annotations):
     Args:
         html_content (str): Original HTML content
         annotations (list): List of annotation dictionaries
-        
+211
+
     Returns:
         str: HTML with injected annotations
     """
@@ -296,7 +312,8 @@ def inject_visual_annotations(html_content, annotations):
             background: #2c3e50;
             color: white;
             padding: 2px 6px;
-            font-size: 10px;
+211
+font-size: 10px;
             border-radius: 3px;
             top: -12px;
             left: -2px;
