@@ -89,8 +89,6 @@ async function loadFile(fileId) {
     }
 }
 
-
-
 // Setup click interaction in iframe
 function setupIframeInteraction() {
     const iframe = document.getElementById('previewFrame');
@@ -149,6 +147,17 @@ function injectAnnotationCSS(iframeDoc) {
             background-color: rgba(231, 76, 60, 0.1) !important;
         }
         
+        .annotation-highlight-variable {
+            outline: 3px solid #3498db !important;
+            outline-offset: 2px !important;
+            position: relative !important;
+            box-shadow: 0 0 10px rgba(52, 152, 219, 0.5) !important;
+            background-color: rgba(52, 152, 219, 0.15) !important;
+            display: inline !important;
+            padding: 2px 4px !important;
+            border-radius: 3px !important;
+        }
+        
         /* Specific styling for inline template variables */
         span.annotation-highlight-element[data-template-var] {
             display: inline !important;
@@ -182,7 +191,7 @@ function applyVisualHighlights(iframeDoc) {
         // CRITICAL FIX: Skip annotations without selectors
         // These are text-level annotations (customText, variables) that cannot be highlighted
         if (!selector) {
-            console.log(`⏭️  Skipped "${annotation.label}" - no selector (${annotation.element_type})`);
+            console.log(`⏭️ Skipped "${annotation.label}" - no selector (${annotation.element_type})`);
             skippedCount++;
             return;
         }
@@ -201,19 +210,68 @@ function applyVisualHighlights(iframeDoc) {
                     const links = Array.from(iframeDoc.querySelectorAll('a'));
                     element = links.find(a => a.textContent.trim() === linkText.trim());
                 }
+            } 
+            // Check for custom :textvariable() selector
+            else if (selector.includes(':textvariable(')) {
+                const match = selector.match(/:textvariable\("(.+?)"\)/);
+                if (match) {
+                    const variableText = match[1];
+                    // Find all text nodes in the document
+                    const walker = iframeDoc.createTreeWalker(
+                        iframeDoc.body,
+                        NodeFilter.SHOW_TEXT,
+                        null,
+                        false
+                    );
+                    
+                    let node;
+                    while (node = walker.nextNode()) {
+                        if (node.textContent.includes(variableText)) {
+                            // Wrap the matching text in a span
+                            const parent = node.parentNode;
+                            const text = node.textContent;
+                            const index = text.indexOf(variableText);
+                            
+                            if (index !== -1) {
+                                const before = text.substring(0, index);
+                                const match = text.substring(index, index + variableText.length);
+                                const after = text.substring(index + variableText.length);
+                                
+                                const span = iframeDoc.createElement('span');
+                                span.className = 'annotation-highlight-variable';
+                                span.setAttribute('data-annotation-id', annotation.id);
+                                span.textContent = match;
+                                
+                                const beforeNode = iframeDoc.createTextNode(before);
+                                const afterNode = iframeDoc.createTextNode(after);
+                                
+                                parent.insertBefore(beforeNode, node);
+                                parent.insertBefore(span, node);
+                                parent.insertBefore(afterNode, node);
+                                parent.removeChild(node);
+                                
+                                element = span;
+                                break;
+                            }
+                        }
+                    }
+                }
             } else {
                 // Use standard querySelector
                 element = iframeDoc.querySelector(selector);
-            }            ;
+            }
             
             if (element) {
                 // Add annotation ID
                 element.setAttribute('data-annotation-id', annotation.id);
                 
                 // Determine highlight class based on type
-                const highlightClass = annotation.type === 'link' 
-                    ? 'annotation-highlight-link' 
-                    : 'annotation-highlight-element';
+                let highlightClass = 'annotation-highlight-element';
+                if (annotation.type === 'link') {
+                    highlightClass = 'annotation-highlight-link';
+                } else if (selector.includes(':textvariable(')) {
+                    highlightClass = 'annotation-highlight-variable';
+                }
                 
                 // Add highlight class
                 element.classList.add(highlightClass);
@@ -226,7 +284,7 @@ function applyVisualHighlights(iframeDoc) {
                 highlightedCount++;
                 console.log(`✅ Highlighted ${annotation.type}: ${selector}`);
             } else {
-                console.warn(`⚠️  Element not found for selector: ${selector}`);
+                console.warn(`⚠️ Element not found for selector: ${selector}`);
                 notFoundCount++;
             }
         } catch (error) {
@@ -235,12 +293,11 @@ function applyVisualHighlights(iframeDoc) {
     });
     
     console.log(`📊 Highlighting Summary:`);
-    console.log(`   ✅ Highlighted: ${highlightedCount}`);
-    console.log(`   ⏭️  Skipped (no selector): ${skippedCount}`);
-    console.log(`   ⚠️  Not found: ${notFoundCount}`);
-    console.log(`   📦 Total annotations: ${currentAnnotations.length}`);
+    console.log(`  ✅ Highlighted: ${highlightedCount}`);
+    console.log(`  ⏭️ Skipped (no selector): ${skippedCount}`);
+    console.log(`  ⚠️ Not found: ${notFoundCount}`);
+    console.log(`  📦 Total annotations: ${currentAnnotations.length}`);
 }
-
 
 // Handle element click in add mode
 function handleElementClick(element) {
@@ -348,7 +405,8 @@ function createAnnotationItem(annotation, index) {
     
     item.innerHTML = `
         <div class="annotation-item-header">
-            <span class="annotation-type-badge ${typeClass}">${typeText}</span>
+            <span class="annotation-type-badge ${typeClass}">${typeText}</span
+>
             <div class="annotation-actions">
                 <button class="annotation-action-btn edit" onclick="editAnnotation('${annotation.id}')" title="Edit">
                     <i class="fas fa-edit"></i>

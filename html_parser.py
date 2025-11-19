@@ -48,9 +48,75 @@ def parse_html_and_detect_elements(html_content):
             "label": f"Custom Text Block: {var_name}",
             "text": content[:200],  # First 200 chars for preview
             "variable_name": var_name,
-            "url": None
+            "url": None,
+            "comments": ""  # New field for user comments
         }
         annotations.append(annotation)
+
+        # Step 1.5: Detect ##variable## and [text] patterns (for blue highlighting)
+    # These patterns are used in email templates to mark dynamic content
+    
+    # Pattern 1: ##variableName## format
+    hash_variable_pattern = re.compile(r'##([^#]+)##')
+    hash_matches = hash_variable_pattern.finditer(str(soup))
+    
+    for match in hash_matches:
+        var_content = match.group(1)
+        full_text = match.group(0)  # ##variableName##
+        
+        # Skip if already annotated
+        if var_content in annotated_elements:
+            continue
+        
+        annotated_elements.add(var_content)
+        
+        annotation = {
+            "id": str(uuid.uuid4()),
+            "type": "element",
+            "element_type": "hashVariable",
+            "input_type": "variable",
+            "selector": f':textvariable("{full_text}")',  # Custom selector for JS
+            "name": var_content,
+            "element_id": "",
+            "label": f"Variable: {var_content}",
+            "text": full_text,
+            "variable_name": var_content,
+            "url": None,
+            "comments": ""  # New field for user comments
+        }
+        annotations.append(annotation)
+    
+    # Pattern 2: [text] format (square brackets)
+    bracket_pattern = re.compile(r'\[([^\]]+)\]')
+    bracket_matches = bracket_pattern.finditer(str(soup))
+    
+    for match in bracket_matches:
+        bracket_content = match.group(1)
+        full_text = match.group(0)  # [text]
+        
+        # Skip if already annotated or if it looks like HTML attribute
+        if bracket_content in annotated_elements or '=' in bracket_content:
+            continue
+        
+        annotated_elements.add(bracket_content)
+        
+        annotation = {
+            "id": str(uuid.uuid4()),
+            "type": "element",
+            "element_type": "bracketVariable",
+            "input_type": "variable",
+            "selector": f':textvariable("{full_text}")',  # Custom selector for JS
+            "name": bracket_content,
+            "element_id": "",
+            "label": f"Placeholder: {bracket_content}",
+            "text": full_text,
+            "variable_name": bracket_content,
+            "url": None,
+            "comments": ""  # New field for user comments
+        }
+        annotations.append(annotation)
+
+
     
     # Step 2: Detect standalone template variables (not inside customText)
     # Find all {{variableName}} that are NOT part of customText blocks
@@ -91,7 +157,8 @@ def parse_html_and_detect_elements(html_content):
                 "label": f"Variable: {var_name}",
                 "text": f"{{{{{var_name}}}}}",
                 "variable_name": var_name,
-                "url": None
+                "url": None,
+                "comments": ""  # New field for user comments
             }
             annotations.append(annotation)
     
@@ -148,7 +215,8 @@ def parse_html_and_detect_elements(html_content):
             "placeholder": element_placeholder,
             "value": element_value,
             "required": element.has_attr('required'),
-            "url": None
+            "url": None,
+            "comments": ""  # New field for user comments
         }
         annotations.append(annotation)
     
@@ -201,7 +269,8 @@ def parse_html_and_detect_elements(html_content):
             "text": link_text,
             "url": href,
             "is_email": is_email,
-            "contains_variable": href_has_var or text_has_var
+            "contains_variable": href_has_var or text_has_var,
+            "comments": ""  # New field for user comments   
         }
         annotations.append(annotation)
     

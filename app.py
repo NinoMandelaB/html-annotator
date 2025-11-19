@@ -209,6 +209,7 @@ def add_annotation():
     data = request.get_json()
     file_id = data.get('file_id')
     new_annotation = data.get('annotation')
+
     
     if not file_id or not new_annotation:
         return jsonify({"error": "Missing file_id or annotation"}), 400
