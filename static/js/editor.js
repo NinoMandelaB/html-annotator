@@ -53,6 +53,7 @@ async function loadFile(fileId) {
         
         // Store annotations FIRST (before iframe loads)
         currentAnnotations = data.annotations;
+        console.log(`📦 Loaded ${currentAnnotations.length} annotations`);
         displayAnnotations();
         
         // Load HTML into iframe
@@ -170,10 +171,21 @@ function injectAnnotationCSS(iframeDoc) {
 // NEW FUNCTION: Apply visual highlights to annotated elements
 function applyVisualHighlights(iframeDoc) {
     let highlightedCount = 0;
+    let skippedCount = 0;
+    let notFoundCount = 0;
+    
+    console.log(`🎨 Attempting to highlight ${currentAnnotations.length} annotations...`);
     
     currentAnnotations.forEach(annotation => {
         const selector = annotation.selector;
-        if (!selector) return;
+        
+        // CRITICAL FIX: Skip annotations without selectors
+        // These are text-level annotations (customText, variables) that cannot be highlighted
+        if (!selector) {
+            console.log(`⏭️  Skipped "${annotation.label}" - no selector (${annotation.element_type})`);
+            skippedCount++;
+            return;
+        }
         
         try {
             // Find element in iframe using CSS selector
@@ -199,14 +211,19 @@ function applyVisualHighlights(iframeDoc) {
                 highlightedCount++;
                 console.log(`✅ Highlighted ${annotation.type}: ${selector}`);
             } else {
-                console.warn(`⚠️ Element not found for selector: ${selector}`);
+                console.warn(`⚠️  Element not found for selector: ${selector}`);
+                notFoundCount++;
             }
         } catch (error) {
             console.error(`❌ Error highlighting ${selector}:`, error);
         }
     });
     
-    console.log(`✅ Applied ${highlightedCount} highlights out of ${currentAnnotations.length} annotations`);
+    console.log(`📊 Highlighting Summary:`);
+    console.log(`   ✅ Highlighted: ${highlightedCount}`);
+    console.log(`   ⏭️  Skipped (no selector): ${skippedCount}`);
+    console.log(`   ⚠️  Not found: ${notFoundCount}`);
+    console.log(`   📦 Total annotations: ${currentAnnotations.length}`);
 }
 
 
