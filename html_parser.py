@@ -28,32 +28,9 @@ def parse_html_and_detect_elements(html_content):
     annotations = []
     annotated_elements = set()  # Track what we've already annotated
     
-    # Step 1: Detect customText blocks FIRST (highest priority)
-    # These are complete conditional content blocks that may contain links/variables
-    custom_text_pattern = re.compile(r'\{\{customText\[(.*?)\]\}\}', re.DOTALL)
-    custom_text_matches = custom_text_pattern.finditer(str(soup))
     
-    for match in custom_text_matches:
-        content = match.group(1)
-        var_name = content[:80] + "..." if len(content) > 80 else content
-        
-        annotation = {
-            "id": str(uuid.uuid4()),
-            "type": "element",
-            "element_type": "customText",
-            "input_type": "customText",
-            "selector": None,  # These are text-level, not DOM elements
-            "name": var_name,
-            "element_id": "",
-            "label": f"Custom Text Block: {var_name}",
-            "text": content[:200],  # First 200 chars for preview
-            "variable_name": var_name,
-            "url": None,
-            "comments": ""  # New field for user comments
-        }
-        annotations.append(annotation)
 
-        # Step 1.5: Detect ##variable## and [text] patterns (for blue highlighting)
+    # Step 1: Detect ##variable## and [text] patterns (for blue highlighting)
     # These patterns are used in email templates to mark dynamic content
     
     # Pattern 1: ##variableName## format  
