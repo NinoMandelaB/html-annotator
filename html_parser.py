@@ -89,20 +89,29 @@ def parse_html_and_detect_elements(html_content):
         annotations.append(annotation)
 
     
-        # Pattern 2: [text] format (square brackets)
+    # Pattern 2: [text] format (square brackets)
     # CREATE ANNOTATION FOR EVERY INSTANCE (no deduplication)
+    # IMPORTANT: Remove HTML comments first to avoid matching [if mso], [endif], etc.
+    
+    # Remove HTML comments from the content before searching
+    html_without_comments = re.sub(r'<!--.*?-->', '', str(soup), flags=re.DOTALL)
+    
     bracket_pattern = re.compile(r'\[([^\]]+)\]')
-    bracket_matches = bracket_pattern.finditer(str(soup))
+    bracket_matches = bracket_pattern.finditer(html_without_comments)
     
     bracket_counter = {}  # Track instances for unique IDs
     for match in bracket_matches:
         bracket_content = match.group(1)
         full_text = match.group(0)  # [text]
         
-        # Skip if it looks like HTML attribute
-        if '=' in bracket_content or '<' in bracket_content:
+        # Skip if it looks like HTML attribute or contains HTML tags
+        if '=' in bracket_content or '<' in bracket_content or '>' in bracket_content:
             continue
         
+        # Skip common Outlook conditional comment keywords
+        if bracket_content.lower() in ['if', 'endif', 'else'] or bracket_content.lower().startswith('if '):
+            continue
+            
         # Create unique instance ID
         if bracket_content not in bracket_counter:
             bracket_counter[bracket_content] = 0
@@ -123,6 +132,7 @@ def parse_html_and_detect_elements(html_content):
             "comments": ""
         }
         annotations.append(annotation)
+
 
     
     # Step 3: Detect form fields (inputs, textareas, selects, buttons)
