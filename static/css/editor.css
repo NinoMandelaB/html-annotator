@@ -215,13 +215,19 @@ body {
 }
 
 .annotation-type-form {
-    background: #3498db;
+    background: #3498db;  /* BLUE -  for ##variable## */
+    color: white;
+}
+
+.annotation-type-bracket {
+    background: #2ecc71;  /* GREEN -  for [text] */
     color: white;
 }
 
 .annotation-type-link {
-    background: #e74c3c;
+    background: #e74c3c;  /* RED -  for links */
     color: white;
+}
 }
 
 .annotation-label {
