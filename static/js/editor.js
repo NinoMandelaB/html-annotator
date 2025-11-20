@@ -132,7 +132,7 @@ function injectAnnotationCSS(iframeDoc) {
     style.textContent = `
         /* Annotation Highlight Styles */
         .annotation-highlight-element {
-            outline: 3px solid #3498db !important;
+            outline: 3px solid #2ecc71 !important;
             outline-offset: 2px !important;
             position: relative !important;
             box-shadow: 0 0 10px rgba(46, 204, 113, 0.5) !important;
