@@ -183,14 +183,14 @@ function applyVisualHighlights(iframeDoc) {
     let skippedCount = 0;
     let notFoundCount = 0;
 
-// Reset instance tracking for each page load
-window.wrappedInstances = {};
+    // Reset instance tracking for each page load
+    window.wrappedInstances = {};
 
     console.log(`🎨 Attempting to highlight ${currentAnnotations.length} annotations...`);
-    
+
     currentAnnotations.forEach(annotation => {
         const selector = annotation.selector;
-        
+
         // CRITICAL FIX: Skip annotations without selectors
         // These are text-level annotations (customText, variables) that cannot be highlighted
         if (!selector) {
@@ -198,12 +198,12 @@ window.wrappedInstances = {};
             skippedCount++;
             return;
         }
-        
+
         try {
             // Find element in iframe using CSS selector
             // IMPROVED: Handle custom selectors for email templates
             let element = null;
-            
+
             // Check for custom :linktext() selector
             if (selector.includes(':linktext(')) {
                 const match = selector.match(/:linktext\("(.+?)"\)/);
@@ -215,84 +215,84 @@ window.wrappedInstances = {};
                 }
             } 
             // Check for custom :textvariable() selector
-else if (selector.includes(':textvariable(')) {
-    const match = selector.match(/:textvariable\("(.+?)"\)/);
-    if (match) {
-        const variableText = match[1];
-        
-        // Track how many instances of this pattern we've already wrapped
-        if (!window.wrappedInstances) {
-            window.wrappedInstances = {};
-        }
-        if (!window.wrappedInstances[variableText]) {
-            window.wrappedInstances[variableText] = 0;
-        }
-        
-        const targetInstance = window.wrappedInstances[variableText];
-        let foundInstances = 0;
-        
-        // Find all text nodes in the document
-        const walker = iframeDoc.createTreeWalker(
-            iframeDoc.body,
-            NodeFilter.SHOW_TEXT,
-            null,
-            false
-        );
-        
-        let node;
-        let wrapped = false;
-        while (node = walker.nextNode()) {
-            if (wrapped) break; // Stop after wrapping the target instance
-            
-            const text = node.textContent;
-            let searchPos = 0;
-            
-            // Find all instances of the pattern in this text node
-            while (true) {
-                const index = text.indexOf(variableText, searchPos);
-                if (index === -1) break;
-                
-                // Check if this is the instance we want to wrap
-                if (foundInstances === targetInstance) {
-                    // Wrap this specific instance
-                    const parent = node.parentNode;
-                    const before = text.substring(0, index);
-                    const match = text.substring(index, index + variableText.length);
-                    const after = text.substring(index + variableText.length);
-                    
-                    const span = iframeDoc.createElement('span');
-                    span.className = 'annotation-highlight-variable';
-                    span.setAttribute('data-annotation-id', annotation.id);
-                    span.textContent = match;
-                    
-                    const beforeNode = iframeDoc.createTextNode(before);
-                    const afterNode = iframeDoc.createTextNode(after);
-                    
-                    parent.insertBefore(beforeNode, node);
-                    parent.insertBefore(span, node);
-                    parent.insertBefore(afterNode, node);
-                    parent.removeChild(node);
-                    
-                    element = span; // Set element for highlighting
-                    wrapped = true;
-                    window.wrappedInstances[variableText]++;
-                    break;
-                }
-                
-                foundInstances++;
-                searchPos = index + variableText.length;
-            }
-        }
+            else if (selector.includes(':textvariable(')) {
+                const match = selector.match(/:textvariable\("(.+?)"\)/);
+                if (match) {
+                    const variableText = match[1];
 
+                    // Track how many instances of this pattern we've already wrapped
+                    if (!window.wrappedInstances) {
+                        window.wrappedInstances = {};
+                    }
+                    if (!window.wrappedInstances[variableText]) {
+                        window.wrappedInstances[variableText] = 0;
+                    }
+
+                    const targetInstance = window.wrappedInstances[variableText];
+                    let foundInstances = 0;
+
+                    // Find all text nodes in the document
+                    const walker = iframeDoc.createTreeWalker(
+                        iframeDoc.body,
+                        NodeFilter.SHOW_TEXT,
+                        null,
+                        false
+                    );
+
+                    let node;
+                    let wrapped = false;
+                    while (node = walker.nextNode()) {
+                        if (wrapped) break; // Stop after wrapping the target instance
+
+                        const text = node.textContent;
+                        let searchPos = 0;
+
+                        // Find all instances of the pattern in this text node
+                        while (true) {
+                            const index = text.indexOf(variableText, searchPos);
+                            if (index === -1) break;
+
+                            // Check if this is the instance we want to wrap
+                            if (foundInstances === targetInstance) {
+                                // Wrap this specific instance
+                                const parent = node.parentNode;
+                                const before = text.substring(0, index);
+                                const match = text.substring(index, index + variableText.length);
+                                const after = text.substring(index + variableText.length);
+
+                                const span = iframeDoc.createElement('span');
+                                span.className = 'annotation-highlight-variable';
+                                span.setAttribute('data-annotation-id', annotation.id);
+                                span.textContent = match;
+
+                                const beforeNode = iframeDoc.createTextNode(before);
+                                const afterNode = iframeDoc.createTextNode(after);
+
+                                parent.insertBefore(beforeNode, node);
+                                parent.insertBefore(span, node);
+                                parent.insertBefore(afterNode, node);
+                                parent.removeChild(node);
+
+                                element = span; // Set element for highlighting
+                                wrapped = true;
+                                window.wrappedInstances[variableText]++;
+                                break;
+                            }
+
+                            foundInstances++;
+                            searchPos = index + variableText.length;
+                        }
+                    }
+                }
             } else {
                 // Use standard querySelector
                 element = iframeDoc.querySelector(selector);
             }
-            
+
             if (element) {
                 // Add annotation ID
                 element.setAttribute('data-annotation-id', annotation.id);
-                
+
                 // Determine highlight class based on type
                 let highlightClass = 'annotation-highlight-element';
                 if (annotation.type === 'link') {
@@ -300,15 +300,15 @@ else if (selector.includes(':textvariable(')) {
                 } else if (selector.includes(':textvariable(')) {
                     highlightClass = 'annotation-highlight-variable';
                 }
-                
+
                 // Add highlight class
                 element.classList.add(highlightClass);
-                
+
                 // Ensure position relative for potential badges
                 if (!element.style.position || element.style.position === 'static') {
                     element.style.position = 'relative';
                 }
-                
+
                 highlightedCount++;
                 console.log(`✅ Highlighted ${annotation.type}: ${selector}`);
             } else {
@@ -319,13 +319,14 @@ else if (selector.includes(':textvariable(')) {
             console.error(`❌ Error highlighting ${selector}:`, error);
         }
     });
-    
+
     console.log(`📊 Highlighting Summary:`);
     console.log(`  ✅ Highlighted: ${highlightedCount}`);
     console.log(`  ⏭️ Skipped (no selector): ${skippedCount}`);
     console.log(`  ⚠️ Not found: ${notFoundCount}`);
     console.log(`  📦 Total annotations: ${currentAnnotations.length}`);
 }
+
 
 // Handle element click in add mode
 function handleElementClick(element) {
