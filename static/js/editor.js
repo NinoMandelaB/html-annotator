@@ -157,6 +157,17 @@ function injectAnnotationCSS(iframeDoc) {
             padding: 2px 4px !important;
             border-radius: 3px !important;
         }
+
+        .annotation-highlight-bracket {
+            outline: 3px solid #2ecc71 !important;
+            outline-offset: 2px !important;
+            position: relative !important;
+            box-shadow: 0 0 10px rgba(46, 204, 113, 0.5) !important;
+            background-color: rgba(46, 204, 113, 0.15) !important;
+            display: inline !important;
+            padding: 2px 4px !important;
+            border-radius: 3px !important;
+        }
         
         /* Specific styling for inline template variables */
         span.annotation-highlight-element[data-template-var] {
@@ -261,8 +272,9 @@ function applyVisualHighlights(iframeDoc) {
                                 const after = text.substring(index + variableText.length);
 
                                 const span = iframeDoc.createElement('span');
-                                span.className = 'annotation-highlight-variable';
-                                span.setAttribute('data-annotation-id', annotation.id);
+                    // Determine if this is a bracket variable or hash variable
+                    const isBracketVariable = annotation.element_type === 'bracketVariable';
+                    span.className = isBracketVariable ? 'annotation-highlight-bracket' : 'annotation-highlight-variable';                                span.setAttribute('data-annotation-id', annotation.id);
                                 span.textContent = match;
 
                                 const beforeNode = iframeDoc.createTextNode(before);
@@ -298,8 +310,9 @@ function applyVisualHighlights(iframeDoc) {
                 if (annotation.type === 'link') {
                     highlightClass = 'annotation-highlight-link';
                 } else if (selector.includes(':textvariable(')) {
-                    highlightClass = 'annotation-highlight-variable';
-                }
+        // Check if it's a bracket variable or hash variable
+        const isBracketVariable = annotation.element_type === 'bracketVariable';
+        highlightClass = isBracketVariable ? 'annotation-highlight-bracket' : 'annotation-highlight-variable';                }
 
                 // Add highlight class
                 element.classList.add(highlightClass);
