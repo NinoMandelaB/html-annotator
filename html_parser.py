@@ -85,8 +85,10 @@ def parse_html_and_detect_elements(html_content):
         if '=' in bracket_content or '<' in bracket_content or '>' in bracket_content:
             continue
         
-        # Skip common Outlook conditional comment keywords
-        if bracket_content.lower() in ['if', 'endif', 'else'] or bracket_content.lower().startswith('if '):
+        # Enhanced filter for ALL Outlook conditional comment patterns
+            lower_content = bracket_content.lower()
+            outlook_patterns = ['if', 'endif', 'else', 'owa', '!owa', 'mso', '!mso', 'vml', 'gte']
+            if any(pattern in lower_content for pattern in outlook_patterns):
             continue
             
         # Create unique instance ID
