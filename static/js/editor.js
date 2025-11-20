@@ -1,5 +1,4 @@
 // Editor JavaScript
-
 let currentFileId = null;
 let currentAnnotations = [];
 let zoomLevel = 1;
