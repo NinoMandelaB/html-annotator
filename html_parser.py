@@ -86,10 +86,10 @@ def parse_html_and_detect_elements(html_content):
             continue
         
         # Enhanced filter for ALL Outlook conditional comment patterns
-            lower_content = bracket_content.lower()
-            outlook_patterns = ['if', 'endif', 'else', 'owa', '!owa', 'mso', '!mso', 'vml', 'gte']
-            if any(pattern in lower_content for pattern in outlook_patterns):
-                continue
+        #lower_content = bracket_content.lower()
+        #outlook_patterns = ['if', 'endif', 'else', 'owa', '!owa', 'mso', '!mso', 'vml', 'gte']
+        #if any(pattern in lower_content for pattern in outlook_patterns):
+            #continue
             
         # Create unique instance ID
         if bracket_content not in bracket_counter:
