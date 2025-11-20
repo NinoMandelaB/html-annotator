@@ -135,7 +135,7 @@ function injectAnnotationCSS(iframeDoc) {
             outline: 3px solid #3498db !important;
             outline-offset: 2px !important;
             position: relative !important;
-            box-shadow: 0 0 10px rgba(52, 152, 219, 0.5) !important;
+            box-shadow: 0 0 10px rgba(46, 204, 113, 0.5) !important;
             background-color: rgba(46, 204, 113, 0.1) !important;
         }
         
