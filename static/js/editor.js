@@ -283,8 +283,6 @@ else if (selector.includes(':textvariable(')) {
                 searchPos = index + variableText.length;
             }
         }
-    }
-}
 
             } else {
                 // Use standard querySelector
