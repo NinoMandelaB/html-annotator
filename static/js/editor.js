@@ -557,34 +557,47 @@ function toggleAddMode() {
     }
 }
 
-// Edit annotation
-function editAnnotation(annotationId) {
-    const annotation = currentAnnotations.find(a => a.id === annotationId);
-    if (!annotation) return;
+// Toggle add annotation mode
+function toggleAddMode() {
+    const iframe = document.getElementById('previewFrame');
+    const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
     
-    editingAnnotationId = annotationId;
+    // Get current text selection from iframe
+    const selection = iframeDoc.getSelection();
     
-    // Fill form
-    document.getElementById('editLabel').value = annotation.label;
-    document.getElementById('editType').value = annotation.type;
-    
-    if (annotation.type === 'link') {
-        document.getElementById('urlFieldGroup').style.display = 'block';
-        document.getElementById('nameFieldGroup').style.display = 'none';
-        document.getElementById('editUrl').value = annotation.url || '';
-    } else {
-        document.getElementById('urlFieldGroup').style.display = 'none';
-        document.getElementById('nameFieldGroup').style.display = 'block';
-        document.getElementById('editName').value = annotation.name || '';
+    if (selection && selection.toString().trim().length > 0) {
+        // User has selected text - capture it
+        const selectedText = selection.toString();
+        const range = selection.getRangeAt(0);
         
-    // Load comments
-    document.getElementById('annotationComments').value = annotation.comments || '';
+        // Store selection info
+        currentTextSelection = {
+            text: selectedText,
+            startContainer: range.startContainer,
+            endContainer: range.endContainer,
+            startOffset: range.startOffset,
+            endOffset: range.endOffset
+        };
+        
+        // Pre-fill the modal
+        document.getElementById('addLabel').value = selectedText.substring(0, 50) + (selectedText.length > 50 ? '...' : '');
+        document.getElementById('addSelector').value = `:textselection("${selectedText.substring(0, 100)}")`;
+        document.getElementById('addType').value = 'element';
+        document.getElementById('addName').value = 'custom-text-selection';
+        toggleAddFields();
+        
+        // Show modal
+        const modal = new bootstrap.Modal(document.getElementById('addModal'));
+        modal.show();
+        
+        // Clear selection visually (optional)
+        // selection.removeAllRanges();
+    } else {
+        // No text selected - show message
+        alert('Please select some text in the preview first, then click "Add Annotation"');
     }
-    
-    // Show modal
-    const modal = new bootstrap.Modal(document.getElementById('editModal'));
-    modal.show();
 }
+
 
 // Save annotation edit
 async function saveAnnotationEdit() {
