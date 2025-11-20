@@ -182,7 +182,10 @@ function applyVisualHighlights(iframeDoc) {
     let highlightedCount = 0;
     let skippedCount = 0;
     let notFoundCount = 0;
-    
+
+// Reset instance tracking for each page load
+window.wrappedInstances = {};
+
     console.log(`🎨 Attempting to highlight ${currentAnnotations.length} annotations...`);
     
     currentAnnotations.forEach(annotation => {
@@ -212,48 +215,77 @@ function applyVisualHighlights(iframeDoc) {
                 }
             } 
             // Check for custom :textvariable() selector
-            else if (selector.includes(':textvariable(')) {
-                const match = selector.match(/:textvariable\("(.+?)"\)/);
-                if (match) {
-                    const variableText = match[1];
-                    // Find all text nodes in the document
-                    const walker = iframeDoc.createTreeWalker(
-                        iframeDoc.body,
-                        NodeFilter.SHOW_TEXT,
-                        null,
-                        false
-                    );
+else if (selector.includes(':textvariable(')) {
+    const match = selector.match(/:textvariable\("(.+?)"\)/);
+    if (match) {
+        const variableText = match[1];
+        
+        // Track how many instances of this pattern we've already wrapped
+        if (!window.wrappedInstances) {
+            window.wrappedInstances = {};
+        }
+        if (!window.wrappedInstances[variableText]) {
+            window.wrappedInstances[variableText] = 0;
+        }
+        
+        const targetInstance = window.wrappedInstances[variableText];
+        let foundInstances = 0;
+        
+        // Find all text nodes in the document
+        const walker = iframeDoc.createTreeWalker(
+            iframeDoc.body,
+            NodeFilter.SHOW_TEXT,
+            null,
+            false
+        );
+        
+        let node;
+        let wrapped = false;
+        while (node = walker.nextNode()) {
+            if (wrapped) break; // Stop after wrapping the target instance
+            
+            const text = node.textContent;
+            let searchPos = 0;
+            
+            // Find all instances of the pattern in this text node
+            while (true) {
+                const index = text.indexOf(variableText, searchPos);
+                if (index === -1) break;
+                
+                // Check if this is the instance we want to wrap
+                if (foundInstances === targetInstance) {
+                    // Wrap this specific instance
+                    const parent = node.parentNode;
+                    const before = text.substring(0, index);
+                    const match = text.substring(index, index + variableText.length);
+                    const after = text.substring(index + variableText.length);
                     
-                    let node;
-                    while (node = walker.nextNode()) {
-                        if (node.textContent.includes(variableText)) {
-                            // Wrap the matching text in a span
-                            const parent = node.parentNode;
-                            const text = node.textContent;
-                            const index = text.indexOf(variableText);
-                            
-                            if (index !== -1) {
-                                const before = text.substring(0, index);
-                                const match = text.substring(index, index + variableText.length);
-                                const after = text.substring(index + variableText.length);
-                                
-                                const span = iframeDoc.createElement('span');
-                                span.className = 'annotation-highlight-variable';
-                                span.setAttribute('data-annotation-id', annotation.id);
-                                span.textContent = match;
-                                
-                                const beforeNode = iframeDoc.createTextNode(before);
-                                const afterNode = iframeDoc.createTextNode(after);
-                                
-                                parent.insertBefore(beforeNode, node);
-                                parent.insertBefore(span, node);
-                                parent.insertBefore(afterNode, node);
-                                parent.removeChild(node);
-                                
-                            }
-                        }
-                    }
+                    const span = iframeDoc.createElement('span');
+                    span.className = 'annotation-highlight-variable';
+                    span.setAttribute('data-annotation-id', annotation.id);
+                    span.textContent = match;
+                    
+                    const beforeNode = iframeDoc.createTextNode(before);
+                    const afterNode = iframeDoc.createTextNode(after);
+                    
+                    parent.insertBefore(beforeNode, node);
+                    parent.insertBefore(span, node);
+                    parent.insertBefore(afterNode, node);
+                    parent.removeChild(node);
+                    
+                    element = span; // Set element for highlighting
+                    wrapped = true;
+                    window.wrappedInstances[variableText]++;
+                    break;
                 }
+                
+                foundInstances++;
+                searchPos = index + variableText.length;
+            }
+        }
+    }
+}
+
             } else {
                 // Use standard querySelector
                 element = iframeDoc.querySelector(selector);
