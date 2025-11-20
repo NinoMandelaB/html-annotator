@@ -52,10 +52,10 @@ async function loadFile(fileId) {
             return;
         }
         
-        // Store annotations FIRST (before iframe loads)
+        60
+            (before iframe loads)
         currentAnnotations = data.annotations;
         console.log(`📦 Loaded ${currentAnnotations.length} annotations`);
-        displayAnnotations();
         
         // Load HTML into iframe
         const iframe = document.getElementById('previewFrame');
@@ -73,6 +73,7 @@ async function loadFile(fileId) {
             setTimeout(() => {
                 try {
                     setupIframeInteraction();
+                    
                     console.log('✅ Visual highlights applied');
                 } catch (error) {
                     console.error('❌ Error applying highlights:', error);
