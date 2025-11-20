@@ -136,7 +136,7 @@ function injectAnnotationCSS(iframeDoc) {
             outline-offset: 2px !important;
             position: relative !important;
             box-shadow: 0 0 10px rgba(52, 152, 219, 0.5) !important;
-            background-color: rgba(52, 152, 219, 0.1) !important;
+            background-color: rgba(46, 204, 113, 0.1) !important;
         }
         
         .annotation-highlight-link {
