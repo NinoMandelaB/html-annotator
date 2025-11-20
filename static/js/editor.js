@@ -73,6 +73,7 @@ async function loadFile(fileId) {
             setTimeout(() => {
                 try {
                     setupIframeInteraction();
+                                displayAnnotations();
                     
                     console.log('✅ Visual highlights applied');
                 } catch (error) {
