@@ -384,8 +384,11 @@ function createAnnotationItem(annotation, index) {
     item.dataset.index = index;
     
     // FIX: Use correct type names
-    const typeClass = annotation.type === 'link' ? 'annotation-type-link' : 'annotation-type-form';
-    const typeText = annotation.type === 'link' ? 'Link' : 'Element';
+    const typeClass = annotation.type === 'link' ? 'annotation-type-link' : 
+                 (annotation.element_type === 'bracketVariable' ? 'annotation-type-bracket' : 'annotation-type-form');
+    const typeText = annotation.type === 'link' ? 'Link' : 
+                (annotation.element_type === 'bracketVariable' ? 'Bracket' : 'Variable');
+
     
     let detailsHTML = '';
     if (annotation.type === 'link' && annotation.url) {
