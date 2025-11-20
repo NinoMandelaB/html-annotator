@@ -5,6 +5,8 @@ let currentAnnotations = [];
 let zoomLevel = 1;
 let isAddMode = false;
 let editingAnnotationId = null;
+let currentTextSelection = null;
+
 
 // Initialize editor on page load
 document.addEventListener('DOMContentLoaded', function() {
@@ -89,6 +91,17 @@ async function loadFile(fileId) {
     }
 }
 
+// Helper function to convert hex color to RGB
+function hexToRgb(hex) {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? {
+        r: parseInt(result[1], 16),
+        g: parseInt(result[2], 16),
+        b: parseInt(result[3], 16)
+    } : {r: 155, g: 89, b: 182}; // Default purple if parsing fails
+}
+
+
 // Setup click interaction in iframe
 function setupIframeInteraction() {
     const iframe = document.getElementById('previewFrame');
@@ -125,7 +138,6 @@ function setupIframeInteraction() {
     });
 }
 
-// NEW FUNCTION: Inject annotation CSS into iframe
 function injectAnnotationCSS(iframeDoc) {
     const style = iframeDoc.createElement('style');
     style.id = 'annotation-styles';
@@ -157,7 +169,7 @@ function injectAnnotationCSS(iframeDoc) {
             padding: 2px 4px !important;
             border-radius: 3px !important;
         }
-
+        
         .annotation-highlight-bracket {
             outline: 3px solid #2ecc71 !important;
             outline-offset: 2px !important;
@@ -169,6 +181,15 @@ function injectAnnotationCSS(iframeDoc) {
             border-radius: 3px !important;
         }
         
+        .annotation-highlight-custom {
+            outline-offset: 2px !important;
+            position: relative !important;
+            display: inline !important;
+            padding: 2px 4px !important;
+            border-radius: 3px !important;
+            cursor: pointer;
+        }
+        
         /* Specific styling for inline template variables */
         span.annotation-highlight-element[data-template-var] {
             display: inline !important;
@@ -177,16 +198,17 @@ function injectAnnotationCSS(iframeDoc) {
             background-color: rgba(52, 152, 219, 0.15) !important;
         }
     `;
-    
+
     // Remove existing annotation styles if any
     const existingStyle = iframeDoc.getElementById('annotation-styles');
     if (existingStyle) {
         existingStyle.remove();
     }
-    
+
     iframeDoc.head.appendChild(style);
     console.log('✅ Annotation CSS injected into iframe');
 }
+
 
 // NEW FUNCTION: Apply visual highlights to annotated elements
 function applyVisualHighlights(iframeDoc) {
@@ -296,10 +318,80 @@ function applyVisualHighlights(iframeDoc) {
                         }
                     }
                 }
-            } else {
-                // Use standard querySelector
-                element = iframeDoc.querySelector(selector);
+                   } else {
+            // Use standard querySelector
+            element = iframeDoc.querySelector(selector);
+        }
+        
+        // NEW: Add this block BEFORE the "if (element)" check
+        // Check for custom :textselection() selector for user-selected text
+        if (selector.includes(':textselection(')) {
+            const match = selector.match(/:textselection\("(.+?)"\)/);
+            if (match) {
+                const selectedText = match[1];
+                const customColor = annotation.customColor || '#9b59b6'; // Get custom color
+                
+                // Find and highlight the first occurrence of this text
+                const walker = iframeDoc.createTreeWalker(
+                    iframeDoc.body,
+                    NodeFilter.SHOW_TEXT,
+                    null,
+                    false
+                );
+
+                let node;
+                let found = false;
+                while (node = walker.nextNode()) {
+                    if (found) break;
+                    
+                    const text = node.textContent;
+                    const index = text.indexOf(selectedText);
+                    
+                    if (index !== -1) {
+                        // Found the text - wrap it
+                        const parent = node.parentNode;
+                        if (parent.nodeName === 'SCRIPT' || parent.nodeName === 'STYLE') continue;
+                        
+                        const before = text.substring(0, index);
+                        const matchText = text.substring(index, index + selectedText.length);
+                        const after = text.substring(index + selectedText.length);
+
+                        const span = iframeDoc.createElement('span');
+                        span.className = 'annotation-highlight-custom';
+                        span.setAttribute('data-annotation-id', annotation.id);
+                        span.textContent = matchText;
+                        
+                        // Apply custom color using inline styles
+                        const rgb = hexToRgb(customColor);
+                        span.style.cssText = `
+                            outline: 3px solid ${customColor} !important;
+                            outline-offset: 2px !important;
+                            box-shadow: 0 0 10px rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.5) !important;
+                            background-color: rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.15) !important;
+                            position: relative !important;
+                            display: inline !important;
+                            padding: 2px 4px !important;
+                            border-radius: 3px !important;
+                            cursor: pointer;
+                        `;
+
+                        const beforeNode = iframeDoc.createTextNode(before);
+                        const afterNode = iframeDoc.createTextNode(after);
+
+                        parent.insertBefore(beforeNode, node);
+                        parent.insertBefore(span, node);
+                        parent.insertBefore(afterNode, node);
+                        parent.removeChild(node);
+
+                        element = span;
+                        found = true;
+                    }
+                }
             }
+        }
+
+        if (element) {
+
 
             if (element) {
                 // Add annotation ID
@@ -540,22 +632,7 @@ function getDragAfterElement(y) {
     }, { offset: Number.NEGATIVE_INFINITY }).element;
 }
 
-// Toggle add annotation mode
-function toggleAddMode() {
-    isAddMode = !isAddMode;
-    const overlay = document.getElementById('addModeOverlay');
-    const btn = document.getElementById('addModeBtn');
-    
-    if (isAddMode) {
-        overlay.style.display = 'block';
-        btn.classList.add('active');
-        btn.innerHTML = '<i class="fas fa-times"></i> Cancel Add Mode';
-    } else {
-        overlay.style.display = 'none';
-        btn.classList.remove('active');
-        btn.innerHTML = '<i class="fas fa-plus"></i> Add Annotation';
-    }
-}
+
 
 // Toggle add annotation mode
 function toggleAddMode() {
@@ -581,22 +658,27 @@ function toggleAddMode() {
         
         // Pre-fill the modal
         document.getElementById('addLabel').value = selectedText.substring(0, 50) + (selectedText.length > 50 ? '...' : '');
-        document.getElementById('addSelector').value = `:textselection("${selectedText.substring(0, 100)}")`;
+        document.getElementById('addSelector').value = `:textselection("${selectedText.substring(0, 100).replace(/"/g, '\\"')}")`;
         document.getElementById('addType').value = 'element';
         document.getElementById('addName').value = 'custom-text-selection';
+        
+        // Set default color (purple)
+        document.getElementById('addColor').value = '#9b59b6';
+        
+        // Show color picker for custom selections
+        document.getElementById('addColorGroup').style.display = 'block';
+        
         toggleAddFields();
         
         // Show modal
         const modal = new bootstrap.Modal(document.getElementById('addModal'));
         modal.show();
-        
-        // Clear selection visually (optional)
-        // selection.removeAllRanges();
     } else {
         // No text selected - show message
         alert('Please select some text in the preview first, then click "Add Annotation"');
     }
 }
+
 
 
 // Save annotation edit
@@ -629,15 +711,18 @@ async function saveAnnotationEdit() {
 // Toggle add modal fields based on type
 function toggleAddFields() {
     const type = document.getElementById('addType').value;
-    
-    if (type === 'link') {
+
+    if (type === 'hyperlink' || type === 'link') {
         document.getElementById('addUrlGroup').style.display = 'block';
         document.getElementById('addNameGroup').style.display = 'none';
+        document.getElementById('addColorGroup').style.display = 'none'; // Hide color for links
     } else {
         document.getElementById('addUrlGroup').style.display = 'none';
         document.getElementById('addNameGroup').style.display = 'block';
+        // Color picker visibility controlled by toggleAddMode
     }
 }
+
 
 
 // Delete annotation
@@ -689,26 +774,36 @@ async function saveNewAnnotation() {
     const type = document.getElementById('addType').value;
     const label = document.getElementById('addLabel').value;
     const selector = document.getElementById('addSelector').value;
-    
+    const customColor = document.getElementById('addColor').value; // Get selected color
+
     if (!label || !selector) {
         alert('Please fill in all required fields');
         return;
     }
-    
+
     const newAnnotation = {
         type: type,
         label: label,
         selector: selector,
-        element_type: type === 'hyperlink' ? 'a' : 'input'
+        element_type: type === 'hyperlink' ? 'a' : 'textSelection',
+        text: currentTextSelection ? currentTextSelection.text : '',
+        customColor: customColor || '#9b59b6' // Store custom color
     };
-    
-    if (type === 'hyperlink') {
+
+    if (type === 'hyperlink' || type === 'link') {
         newAnnotation.url = document.getElementById('addUrl').value;
     } else {
-        newAnnotation.name = document.getElementById('addName').value;
-        newAnnotation.input_type = 'text';
+        newAnnotation.name = document.getElementById('addName').value || 'custom-selection';
+        newAnnotation.input_type = 'textSelection';
+        
+        // Store selection data for highlighting
+        if (currentTextSelection) {
+            newAnnotation.selectionData = {
+                text: currentTextSelection.text
+            };
+        }
     }
-    
+
     try {
         const response = await fetch('/api/add_annotation', {
             method: 'POST',
@@ -718,20 +813,24 @@ async function saveNewAnnotation() {
                 annotation: newAnnotation
             })
         });
-        
+
         const data = await response.json();
-        
+
         if (data.success) {
             currentAnnotations.push(data.annotation);
             displayAnnotations();
             loadFile(currentFileId); // Reload to update preview
-            
+
             // Close modal and reset form
             bootstrap.Modal.getInstance(document.getElementById('addModal')).hide();
             document.getElementById('addLabel').value = '';
             document.getElementById('addUrl').value = '';
             document.getElementById('addName').value = '';
             document.getElementById('addSelector').value = '';
+            document.getElementById('addColor').value = '#9b59b6';
+            
+            // Clear selection
+            currentTextSelection = null;
         } else {
             showError('Failed to add annotation');
         }
@@ -740,6 +839,7 @@ async function saveNewAnnotation() {
         showError('Failed to add annotation');
     }
 }
+
 
 // Save annotations to server
 async function saveAnnotations() {
