@@ -89,12 +89,12 @@ def parse_html_and_detect_elements(html_content):
         lower_content = bracket_content.lower()
         outlook_patterns = ['if', 'endif', 'else', 'owa', '!owa', 'mso', '!mso', 'vml', 'gte']
         if any(pattern in lower_content for pattern in outlook_patterns):
-            #continue
+            continue
             
         # Create unique instance ID
         if bracket_content not in bracket_counter:
             bracket_counter[bracket_content] = 0
-        bracket_counter[bracket_content] += 1
+            bracket_counter[bracket_content] += 1
         
         annotation = {
             "id": str(uuid.uuid4()),
