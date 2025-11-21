@@ -62,25 +62,25 @@ async function loadFile(fileId) {
         
         // CRITICAL FIX: Clear any previous onload handler
         iframe.onload = null;
+
+            // CRITICAL FIX: Setup interaction AFTER iframe loads with delay
+    iframe.onload = function() {
+        console.log('🔵 Iframe loaded, waiting for DOM...');
+        // Add delay to ensure iframe DOM is fully ready
+        setTimeout(() => {
+            try {
+                setupIframeInteraction();
+                displayAnnotations();
+                console.log('✅ Visual highlights applied');
+            } catch (error) {
+                console.error('❌ Error applying highlights:', error);
+            }
+        }, 150); // Increased to 150ms for reliability
+    };
+
         
         // Set the HTML content
         iframe.srcdoc = data.html;
-        
-        // CRITICAL FIX: Setup interaction AFTER iframe loads with delay
-        iframe.onload = function() {
-            console.log('🔵 Iframe loaded, waiting for DOM...');
-            // Add delay to ensure iframe DOM is fully ready
-            setTimeout(() => {
-                try {
-                    setupIframeInteraction();
-                                displayAnnotations();
-                    
-                    console.log('✅ Visual highlights applied');
-                } catch (error) {
-                    console.error('❌ Error applying highlights:', error);
-                }
-            }, 150); // Increased to 150ms for reliability
-        };
         
         // Update title
         const fileName = document.querySelector(`[data-file-id="${fileId}"] .file-name`).textContent;
