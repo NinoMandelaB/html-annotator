@@ -486,6 +486,8 @@ function generateSelectorForElement(element) {
 
 // Display annotations in the sidebar
 function displayAnnotations() {
+        console.log('🔍 displayAnnotations() called with', currentAnnotations.length, 'annotations');
+        console.log('Container:', container, 'Count:', count);
     const container = document.getElementById('annotationList');
     const count = document.getElementById('annotationCount');
     
