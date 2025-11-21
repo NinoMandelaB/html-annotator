@@ -689,49 +689,46 @@ async function saveNewAnnotation() {
     const type = document.getElementById('addType').value;
     const label = document.getElementById('addLabel').value;
     const selector = document.getElementById('addSelector').value;
-    
+    const color = document.getElementById('addColor').value || "#2ecc71"; // gets the color
+
     if (!label || !selector) {
         alert('Please fill in all required fields');
         return;
     }
-    
+
     const newAnnotation = {
         type: type,
         label: label,
         selector: selector,
-        element_type: type === 'hyperlink' ? 'a' : 'input'
+        color: color,
+        elementtype: type === 'link' ? 'a' : 'input'
     };
-    
-    if (type === 'hyperlink') {
+
+    if (type === 'link') {
         newAnnotation.url = document.getElementById('addUrl').value;
     } else {
         newAnnotation.name = document.getElementById('addName').value;
-        newAnnotation.input_type = 'text';
+        newAnnotation.inputtype = 'text';
     }
-    
+
     try {
-        const response = await fetch('/api/add_annotation', {
+        const response = await fetch('/api/addannotation', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                file_id: currentFileId,
-                annotation: newAnnotation
-            })
+            body: JSON.stringify({ fileid: currentFileId, annotation: newAnnotation }),
         });
-        
         const data = await response.json();
-        
         if (data.success) {
             currentAnnotations.push(data.annotation);
             displayAnnotations();
-            loadFile(currentFileId); // Reload to update preview
-            
-            // Close modal and reset form
+            loadFile(currentFileId);
+            // Reset form
             bootstrap.Modal.getInstance(document.getElementById('addModal')).hide();
             document.getElementById('addLabel').value = '';
             document.getElementById('addUrl').value = '';
             document.getElementById('addName').value = '';
             document.getElementById('addSelector').value = '';
+            document.getElementById('addColor').value = '#2ecc71';
         } else {
             showError('Failed to add annotation');
         }
@@ -740,6 +737,7 @@ async function saveNewAnnotation() {
         showError('Failed to add annotation');
     }
 }
+
 
 // Save annotations to server
 async function saveAnnotations() {
