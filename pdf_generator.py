@@ -1,6 +1,6 @@
 """
 PDF Generator Module
-Converts HTML email templates with annotations to PDF format.
+Converts HTML email templates with annotations to PDF format
 """
 
 import pdfkit
