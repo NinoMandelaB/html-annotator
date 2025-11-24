@@ -274,41 +274,45 @@ function applyVisualHighlights(iframeDoc) {
                         }
                     }
                     
-                    // Second pass: wrap all occurrences in each text node
-                    nodesToProcess.forEach(node => {
-                        const parent = node.parentNode;
-                        const text = node.textContent;
-                        
-                        // Find ALL occurrences in this text node
-                        if (text.includes(variableText)) {
-                            const parts = text.split(variableText);
-                            const fragment = iframeDoc.createDocumentFragment();
-                            
-                            parts.forEach((part, index) => {
-                                // Add the text before the variable
-                                if (part) {
-                                    fragment.appendChild(iframeDoc.createTextNode(part));
-                                }
-                                
-                                // Add the variable (except after the last part)
-                                if (index < parts.length - 1) {
-                                    const span = iframeDoc.createElement('span');
-                                    const isBracketVariable = annotation.elementtype === 'bracketVariable';
-                                    span.className = isBracketVariable ? 'annotation-highlight-bracket' : 'annotation-highlight-variable';
-                                    span.setAttribute('data-annotation-id', annotation.id);
-                                    span.textContent = variableText;
-                                    fragment.appendChild(span);
-                                }
-                            });
-                            
-                            parent.replaceChild(fragment, node);
-                            if (!element) {
-                                element = parent.querySelector(`[data-annotation-id="${annotation.id}"]`);
-                            }
-                            
-                            console.log(`✅ Wrapped ${parts.length - 1} instance(s) of "${variableText}"`);
-                        }
-                    });
+                   // Second pass: wrap all occurrences in each text node
+nodesToProcess.forEach(node => {
+    const parent = node.parentNode;
+    const text = node.textContent;
+    
+    // Find ALL occurrences in this text node
+    if (text.includes(variableText)) {
+        const parts = text.split(variableText);
+        const fragment = iframeDoc.createDocumentFragment();
+        
+        parts.forEach((part, index) => {
+            // Add the text before the variable
+            if (part) {
+                fragment.appendChild(iframeDoc.createTextNode(part));
+            }
+            
+            // Add the variable (except after the last part)
+            if (index < parts.length - 1) {
+                const span = iframeDoc.createElement('span');
+                
+                // ⭐ CRITICAL FIX: Check elementType from annotation, not variable text pattern
+                const isBracketVariable = (annotation.elementtype === 'bracketVariable');
+                
+                span.className = isBracketVariable ? 'annotation-highlight-bracket' : 'annotation-highlight-variable';
+                span.setAttribute('data-annotation-id', annotation.id);
+                span.textContent = variableText;
+                fragment.appendChild(span);
+            }
+        });
+        
+        parent.replaceChild(fragment, node);
+        if (!element) {
+            element = parent.querySelector(`[data-annotation-id="${annotation.id}"]`);
+        }
+        
+        console.log(`✅ Wrapped ${parts.length - 1} instance(s) of "${variableText}" as ${annotation.elementtype}`);
+    }
+});
+
                 }
             }
             // Check for custom textselection selector for user-selected text
@@ -510,31 +514,46 @@ function createAnnotationItem(annotation, index) {
     item.dataset.annotationId = annotation.id;
     item.dataset.index = index;
     
-    // FIX: Use correct type names
-    const typeClass = annotation.type === 'link' ? 'annotation-type-link' : 
-                 (annotation.element_type === 'bracketVariable' ? 'annotation-type-bracket' : 'annotation-type-form');
-    const typeText = annotation.type === 'link' ? 'Link' : 
-                (annotation.element_type === 'bracketVariable' ? 'Bracket' : 'Variable');
-
+    // Determine badge class and text based on type
+    let typeClass = 'annotation-type-form'; // Default to blue (variable)
+    let typeText = 'Variable';
     
+    if (annotation.type === 'link') {
+        typeClass = 'annotation-type-link'; // Red for links
+        typeText = 'Link';
+    } else if (annotation.elementtype === 'bracketVariable') {
+        typeClass = 'annotation-type-bracket'; // Green for brackets
+        typeText = 'Bracket';
+    } else if (annotation.elementtype === 'textSelection' || annotation.inputtype === 'textSelection') {
+        // ⭐ NEW: Custom color for user-selected text
+        typeClass = 'annotation-type-custom';
+        typeText = 'Custom';
+    }
+    
+    // Build details HTML
     let detailsHTML = '';
     if (annotation.type === 'link' && annotation.url) {
         detailsHTML = `<div><strong>URL:</strong> ${annotation.url}</div>`;
     } else if (annotation.type === 'element') {
-        if (annotation.variable_name) {
-            detailsHTML += `<div><strong>Variable:</strong> ${annotation.variable_name}</div>`;
+        if (annotation.variablename) {
+            detailsHTML = `<div><strong>Variable:</strong> ${annotation.variablename}</div>`;
         } else if (annotation.name) {
-            detailsHTML += `<div><strong>Name:</strong> ${annotation.name}</div>`;
+            detailsHTML = `<div><strong>Name:</strong> ${annotation.name}</div>`;
         }
-        if (annotation.input_type) {
-            detailsHTML += `<div><strong>Type:</strong> ${annotation.input_type}</div>`;
+        if (annotation.inputtype) {
+            detailsHTML += `<div><strong>Type:</strong> ${annotation.inputtype}</div>`;
         }
+    }
+    
+    // ⭐ NEW: Apply custom color inline if present
+    let badgeStyle = '';
+    if (annotation.customColor && typeClass === 'annotation-type-custom') {
+        badgeStyle = `style="background-color: ${annotation.customColor};"`;
     }
     
     item.innerHTML = `
         <div class="annotation-item-header">
-            <span class="annotation-type-badge ${typeClass}">${typeText}</span
->
+            <span class="annotation-type-badge ${typeClass}" ${badgeStyle}>${typeText}</span>
             <div class="annotation-actions">
                 <button class="annotation-action-btn edit" onclick="editAnnotation('${annotation.id}')" title="Edit">
                     <i class="fas fa-edit"></i>
@@ -552,6 +571,7 @@ function createAnnotationItem(annotation, index) {
     
     return item;
 }
+
 
 // Setup drag and drop for reordering annotations
 function setupDragAndDrop() {
@@ -676,6 +696,38 @@ function toggleAddMode() {
 }
 
 
+// Edit annotation
+function editAnnotation(annotationId) {
+    const annotation = currentAnnotations.find(a => a.id === annotationId);
+    if (!annotation) return;
+    
+    editingAnnotationId = annotationId;
+    
+    // Fill form
+    document.getElementById('editLabel').value = annotation.label;
+    document.getElementById('editType').value = annotation.type;
+    
+    if (annotation.type === 'link') {
+        document.getElementById('urlFieldGroup').style.display = 'block';
+        document.getElementById('nameFieldGroup').style.display = 'none';
+        document.getElementById('editUrl').value = annotation.url || '';
+    } else {
+        document.getElementById('urlFieldGroup').style.display = 'none';
+        document.getElementById('nameFieldGroup').style.display = 'block';
+        document.getElementById('editName').value = annotation.name || '';
+    }
+    
+    // Load comments
+    const commentsField = document.getElementById('annotationComments');
+    if (commentsField) {
+        commentsField.value = annotation.comments || '';
+    }
+    
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('editModal'));
+    modal.show();
+}
+
 
 
 // Save annotation edit
@@ -717,6 +769,7 @@ function toggleAddFields() {
         document.getElementById('addNameGroup').style.display = 'block';
     }
 }
+
 
 
 // Delete annotation

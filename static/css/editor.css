@@ -281,6 +281,12 @@ body {
     color: #495057;
 }
 
+.annotation-type-custom {
+    background: #9b59b6; /* Purple - for custom selections (default) */
+    color: white;
+}
+
+
 /* Modal Customization */
 .modal-header {
     background: #667eea;
