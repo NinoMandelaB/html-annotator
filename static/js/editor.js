@@ -137,7 +137,7 @@ function setupIframeInteraction() {
     });
 }
 
-// NEW FUNCTION: Inject annotation CSS into iframe
+//Inject annotation CSS into iframe
 function injectAnnotationCSS(iframeDoc) {
     const style = iframeDoc.createElement('style');
     style.id = 'annotation-styles';
@@ -169,7 +169,7 @@ function injectAnnotationCSS(iframeDoc) {
             padding: 2px 4px !important;
             border-radius: 3px !important;
         }
-
+        
         .annotation-highlight-bracket {
             outline: 3px solid #2ecc71 !important;
             outline-offset: 2px !important;
@@ -179,6 +179,15 @@ function injectAnnotationCSS(iframeDoc) {
             display: inline !important;
             padding: 2px 4px !important;
             border-radius: 3px !important;
+        }
+        
+        .annotation-highlight-custom {
+            outline-offset: 2px !important;
+            position: relative !important;
+            display: inline !important;
+            padding: 2px 4px !important;
+            border-radius: 3px !important;
+            cursor: pointer;
         }
         
         /* Specific styling for inline template variables */
@@ -199,6 +208,7 @@ function injectAnnotationCSS(iframeDoc) {
     iframeDoc.head.appendChild(style);
     console.log('✅ Annotation CSS injected into iframe');
 }
+
 
 // Apply visual highlights to annotated elements
 function applyVisualHighlights(iframeDoc) {
