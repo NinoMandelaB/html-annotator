@@ -258,8 +258,92 @@ def delete_annotation():
     
     return jsonify({"error": "File not found"}), 404
 
-@app.route("/generate_pdfs", methods=["POST"])
+@app.route('/generate_pdfs', methods=['POST'])
 def generate_pdfs():
+    """
+    Generate PDFs from selected files with their annotations.
+    Returns a ZIP file containing all annotated PDFs.
+    """
+    if 'files_data' not in session:
+        return jsonify({'error': 'No files to process'}), 404
+    
+    data = request.get_json()
+    selected_file_ids = data.get('selected_files', [])
+    
+    if not selected_file_ids:
+        return jsonify({'error': 'No files selected'}), 400
+    
+    files_data = session['files_data']
+    
+    try:
+        # Create a ZIP file in memory
+        zip_buffer = io.BytesIO()
+        
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED, False) as zip_file:
+            for file_data in files_data:
+                if file_data['id'] in selected_file_ids:
+                    try:
+                        # Filter out annotations that can't be rendered in PDF
+                        renderable_annotations = []
+                        for annotation in file_data['annotations']:
+                            # Skip annotations without selectors (text-level annotations)
+                            if not annotation.get('selector'):
+                                print(f"⏭️  Skipping annotation '{annotation.get('label')}' - no selector")
+                                continue
+                            
+                            # Skip custom text selections (these are handled by JavaScript only)
+                            if ':textselection(' in annotation.get('selector', ''):
+                                print(f"⏭️  Skipping text selection '{annotation.get('label')}' - not supported in PDF")
+                                continue
+                            
+                            # Skip variable annotations (these are handled by the parser)
+                            if ':textvariable(' in annotation.get('selector', ''):
+                                print(f"⏭️  Skipping variable '{annotation.get('label')}' - already detected by parser")
+                                continue
+                            
+                            renderable_annotations.append(annotation)
+                        
+                        print(f"📄 Generating PDF for '{file_data['filename']}' with {len(renderable_annotations)} annotations")
+                        
+                        # Generate PDF with only renderable annotations
+                        pdf_bytes = convert_annotated_html_to_pdf(
+                            file_data['html_content'],
+                            renderable_annotations
+                        )
+                        
+                        # Create filename
+                        original_name = os.path.splitext(file_data['filename'])[0]
+                        pdf_filename = f"annotated_{original_name}.pdf"
+                        
+                        # Add to ZIP
+                        zip_file.writestr(pdf_filename, pdf_bytes)
+                        print(f"✅ Successfully added '{pdf_filename}' to ZIP")
+                        
+                    except Exception as file_error:
+                        # Log the error but continue processing other files
+                        print(f"❌ Error processing file '{file_data['filename']}': {str(file_error)}")
+                        import traceback
+                        traceback.print_exc()
+                        
+                        # Create an error file in the ZIP
+                        error_message = f"Error generating PDF for {file_data['filename']}:\n{str(file_error)}"
+                        error_filename = f"ERROR_{file_data['filename']}.txt"
+                        zip_file.writestr(error_filename, error_message)
+        
+        zip_buffer.seek(0)
+        return send_file(
+            zip_buffer,
+            as_attachment=True,
+            download_name='annotated_email_templates.zip',
+            mimetype='application/zip'
+        )
+        
+    except Exception as e:
+        print(f"❌ Error generating PDFs: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Error generating PDFs: {str(e)}'}), 500
+
     """
     Generate PDFs from selected files with their annotations.
     Returns a ZIP file containing all annotated PDFs.
