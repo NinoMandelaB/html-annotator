@@ -642,11 +642,17 @@ function toggleAddMode() {
         document.getElementById('addType').value = 'element';
         document.getElementById('addName').value = 'custom-text-selection';
         
-        // Set default color (purple)
-        document.getElementById('addColor').value = '#9b59b6';
+        // Set default color (purple) - ONLY if the field exists
+        const colorField = document.getElementById('addColor');
+        if (colorField) {
+            colorField.value = '#9b59b6';
+        }
         
-        // Show color picker for custom selections
-        document.getElementById('addColorGroup').style.display = 'block';
+        // Show color picker for custom selections - ONLY if the group exists
+        const colorGroup = document.getElementById('addColorGroup');
+        if (colorGroup) {
+            colorGroup.style.display = 'block';
+        }
         
         toggleAddFields();
         
@@ -658,6 +664,7 @@ function toggleAddMode() {
         alert('Please select some text in the preview first, then click "Add Annotation".');
     }
 }
+
 
 
 
@@ -751,7 +758,10 @@ async function saveNewAnnotation() {
     const type = document.getElementById('addType').value;
     const label = document.getElementById('addLabel').value;
     const selector = document.getElementById('addSelector').value;
-    const customColor = document.getElementById('addColor').value; // Get selected color
+    
+    // Get color field value - use default if field doesn't exist
+    const colorField = document.getElementById('addColor');
+    const customColor = colorField ? colorField.value : '#9b59b6';
     
     if (!label || !selector) {
         alert('Please fill in all required fields');
@@ -806,7 +816,11 @@ async function saveNewAnnotation() {
             document.getElementById('addUrl').value = '';
             document.getElementById('addName').value = '';
             document.getElementById('addSelector').value = '';
-            document.getElementById('addColor').value = '#9b59b6';
+            
+            // Reset color field if it exists
+            if (colorField) {
+                colorField.value = '#9b59b6';
+            }
             
             // Clear selection
             currentTextSelection = null;
@@ -818,6 +832,7 @@ async function saveNewAnnotation() {
         showError('Failed to add annotation: ' + error.message);
     }
 }
+
 
 
 
