@@ -1,11 +1,10 @@
 // Editor JavaScript
+
 let currentFileId = null;
 let currentAnnotations = [];
 let zoomLevel = 1;
 let isAddMode = false;
 let editingAnnotationId = null;
-let currentTextSelection = null;
-
 
 // Initialize editor on page load
 document.addEventListener('DOMContentLoaded', function() {
@@ -52,35 +51,33 @@ async function loadFile(fileId) {
             return;
         }
         
-        60
-            (before iframe loads)
+        // Store annotations FIRST (before iframe loads)
         currentAnnotations = data.annotations;
         console.log(`📦 Loaded ${currentAnnotations.length} annotations`);
+        displayAnnotations();
         
         // Load HTML into iframe
         const iframe = document.getElementById('previewFrame');
         
         // CRITICAL FIX: Clear any previous onload handler
         iframe.onload = null;
-
-            // CRITICAL FIX: Setup interaction AFTER iframe loads with delay
-    iframe.onload = function() {
-        console.log('🔵 Iframe loaded, waiting for DOM...');
-        // Add delay to ensure iframe DOM is fully ready
-        setTimeout(() => {
-            try {
-                setupIframeInteraction();
-                displayAnnotations();
-                console.log('✅ Visual highlights applied');
-            } catch (error) {
-                console.error('❌ Error applying highlights:', error);
-            }
-        }, 150); // Increased to 150ms for reliability
-    };
-
         
         // Set the HTML content
         iframe.srcdoc = data.html;
+        
+        // CRITICAL FIX: Setup interaction AFTER iframe loads with delay
+        iframe.onload = function() {
+            console.log('🔵 Iframe loaded, waiting for DOM...');
+            // Add delay to ensure iframe DOM is fully ready
+            setTimeout(() => {
+                try {
+                    setupIframeInteraction();
+                    console.log('✅ Visual highlights applied');
+                } catch (error) {
+                    console.error('❌ Error applying highlights:', error);
+                }
+            }, 150); // Increased to 150ms for reliability
+        };
         
         // Update title
         const fileName = document.querySelector(`[data-file-id="${fileId}"] .file-name`).textContent;
@@ -91,17 +88,6 @@ async function loadFile(fileId) {
         showError('Failed to load file');
     }
 }
-
-// Helper function to convert hex color to RGB
-function hexToRgb(hex) {
-    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-    return result ? {
-        r: parseInt(result[1], 16),
-        g: parseInt(result[2], 16),
-        b: parseInt(result[3], 16)
-    } : {r: 155, g: 89, b: 182}; // Default purple if parsing fails
-}
-
 
 // Setup click interaction in iframe
 function setupIframeInteraction() {
@@ -139,6 +125,7 @@ function setupIframeInteraction() {
     });
 }
 
+// NEW FUNCTION: Inject annotation CSS into iframe
 function injectAnnotationCSS(iframeDoc) {
     const style = iframeDoc.createElement('style');
     style.id = 'annotation-styles';
@@ -170,7 +157,7 @@ function injectAnnotationCSS(iframeDoc) {
             padding: 2px 4px !important;
             border-radius: 3px !important;
         }
-        
+
         .annotation-highlight-bracket {
             outline: 3px solid #2ecc71 !important;
             outline-offset: 2px !important;
@@ -182,15 +169,6 @@ function injectAnnotationCSS(iframeDoc) {
             border-radius: 3px !important;
         }
         
-        .annotation-highlight-custom {
-            outline-offset: 2px !important;
-            position: relative !important;
-            display: inline !important;
-            padding: 2px 4px !important;
-            border-radius: 3px !important;
-            cursor: pointer;
-        }
-        
         /* Specific styling for inline template variables */
         span.annotation-highlight-element[data-template-var] {
             display: inline !important;
@@ -199,17 +177,16 @@ function injectAnnotationCSS(iframeDoc) {
             background-color: rgba(52, 152, 219, 0.15) !important;
         }
     `;
-
+    
     // Remove existing annotation styles if any
     const existingStyle = iframeDoc.getElementById('annotation-styles');
     if (existingStyle) {
         existingStyle.remove();
     }
-
+    
     iframeDoc.head.appendChild(style);
     console.log('✅ Annotation CSS injected into iframe');
 }
-
 
 // NEW FUNCTION: Apply visual highlights to annotated elements
 function applyVisualHighlights(iframeDoc) {
@@ -319,80 +296,10 @@ function applyVisualHighlights(iframeDoc) {
                         }
                     }
                 }
-                   } else {
-            // Use standard querySelector
-            element = iframeDoc.querySelector(selector);
-        }
-        
-        // NEW: Add this block BEFORE the "if (element)" check
-        // Check for custom :textselection() selector for user-selected text
-        if (selector.includes(':textselection(')) {
-            const match = selector.match(/:textselection\("(.+?)"\)/);
-            if (match) {
-                const selectedText = match[1];
-                const customColor = annotation.customColor || '#9b59b6'; // Get custom color
-                
-                // Find and highlight the first occurrence of this text
-                const walker = iframeDoc.createTreeWalker(
-                    iframeDoc.body,
-                    NodeFilter.SHOW_TEXT,
-                    null,
-                    false
-                );
-
-                let node;
-                let found = false;
-                while (node = walker.nextNode()) {
-                    if (found) break;
-                    
-                    const text = node.textContent;
-                    const index = text.indexOf(selectedText);
-                    
-                    if (index !== -1) {
-                        // Found the text - wrap it
-                        const parent = node.parentNode;
-                        if (parent.nodeName === 'SCRIPT' || parent.nodeName === 'STYLE') continue;
-                        
-                        const before = text.substring(0, index);
-                        const matchText = text.substring(index, index + selectedText.length);
-                        const after = text.substring(index + selectedText.length);
-
-                        const span = iframeDoc.createElement('span');
-                        span.className = 'annotation-highlight-custom';
-                        span.setAttribute('data-annotation-id', annotation.id);
-                        span.textContent = matchText;
-                        
-                        // Apply custom color using inline styles
-                        const rgb = hexToRgb(customColor);
-                        span.style.cssText = `
-                            outline: 3px solid ${customColor} !important;
-                            outline-offset: 2px !important;
-                            box-shadow: 0 0 10px rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.5) !important;
-                            background-color: rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.15) !important;
-                            position: relative !important;
-                            display: inline !important;
-                            padding: 2px 4px !important;
-                            border-radius: 3px !important;
-                            cursor: pointer;
-                        `;
-
-                        const beforeNode = iframeDoc.createTextNode(before);
-                        const afterNode = iframeDoc.createTextNode(after);
-
-                        parent.insertBefore(beforeNode, node);
-                        parent.insertBefore(span, node);
-                        parent.insertBefore(afterNode, node);
-                        parent.removeChild(node);
-
-                        element = span;
-                        found = true;
-                    }
-                }
+            } else {
+                // Use standard querySelector
+                element = iframeDoc.querySelector(selector);
             }
-        }
-
-        if (element) {
-
 
             if (element) {
                 // Add annotation ID
@@ -486,7 +393,6 @@ function generateSelectorForElement(element) {
 
 // Display annotations in the sidebar
 function displayAnnotations() {
-        console.log('🔍 displayAnnotations() called with', currentAnnotations.length, 'annotations');
     const container = document.getElementById('annotationList');
     const count = document.getElementById('annotationCount');
     
@@ -635,7 +541,6 @@ function getDragAfterElement(y) {
 }
 
 
-
 // Toggle add annotation mode
 function toggleAddMode() {
     const iframe = document.getElementById('previewFrame');
@@ -682,9 +587,6 @@ function toggleAddMode() {
 }
 
 
-
-
-
 // Save annotation edit
 async function saveAnnotationEdit() {
     const annotation = currentAnnotations.find(a => a.id === editingAnnotationId);
@@ -715,18 +617,15 @@ async function saveAnnotationEdit() {
 // Toggle add modal fields based on type
 function toggleAddFields() {
     const type = document.getElementById('addType').value;
-
-    if (type === 'hyperlink' || type === 'link') {
+    
+    if (type === 'link') {
         document.getElementById('addUrlGroup').style.display = 'block';
         document.getElementById('addNameGroup').style.display = 'none';
-        document.getElementById('addColorGroup').style.display = 'none'; // Hide color for links
     } else {
         document.getElementById('addUrlGroup').style.display = 'none';
         document.getElementById('addNameGroup').style.display = 'block';
-        // Color picker visibility controlled by toggleAddMode
     }
 }
-
 
 
 // Delete annotation
