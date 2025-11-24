@@ -677,9 +677,11 @@ function toggleAddMode() {
         modal.show();
     } else {
         // No text selected - show message
-        alert('Please select some text in the preview first, then click "Add Annotation"');
+        alert('Please select some text in the preview first, then click "Add Annotation".');
     }
 }
+
+
 
 
 
@@ -776,31 +778,46 @@ async function saveNewAnnotation() {
     const type = document.getElementById('addType').value;
     const label = document.getElementById('addLabel').value;
     const selector = document.getElementById('addSelector').value;
+    const customColor = document.getElementById('addColor').value; // Get selected color
     
     if (!label || !selector) {
         alert('Please fill in all required fields');
         return;
     }
-
+    
     const newAnnotation = {
         type: type,
         label: label,
         selector: selector,
-        element_type: type === 'hyperlink' ? 'a' : 'input'
+        elementtype: type === 'hyperlink' ? 'a' : 'textSelection',
+        text: currentTextSelection ? currentTextSelection.text : '',
+        customColor: customColor || '#9b59b6' // Store custom color
     };
     
-    if (type === 'hyperlink') {
+    if (type === 'hyperlink' || type === 'link') {
         newAnnotation.url = document.getElementById('addUrl').value;
     } else {
-        newAnnotation.name = document.getElementById('addName').value;
-        newAnnotation.input_type = 'text';
+        newAnnotation.name = document.getElementById('addName').value || 'custom-selection';
+        newAnnotation.inputtype = 'textSelection';
     }
-
+    
+    // Store selection data for highlighting
+    if (currentTextSelection) {
+        newAnnotation.selectionData = {
+            text: currentTextSelection.text
+        };
+    }
+    
     try {
-        const response = await fetch('/api/addannotation', {
+        const response = await fetch('/api/add_annotation', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fileid: currentFileId, annotation: newAnnotation }),
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                file_id: currentFileId,
+                annotation: newAnnotation
+            })
         });
         
         const data = await response.json();
@@ -816,14 +833,19 @@ async function saveNewAnnotation() {
             document.getElementById('addUrl').value = '';
             document.getElementById('addName').value = '';
             document.getElementById('addSelector').value = '';
+            document.getElementById('addColor').value = '#9b59b6';
+            
+            // Clear selection
+            currentTextSelection = null;
         } else {
-            showError('Failed to add annotation');
+            showError('Failed to add annotation: ' + (data.error || 'Unknown error'));
         }
     } catch (error) {
         console.error('Error adding annotation:', error);
-        showError('Failed to add annotation');
+        showError('Failed to add annotation: ' + error.message);
     }
 }
+
 
 
 // Save annotations to server
