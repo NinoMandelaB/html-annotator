@@ -1,7 +1,7 @@
 Flask==2.3.2
 beautifulsoup4==4.12.2
 lxml==5.3.0
-weasyprint==60.1
+xhtml2pdf==0.2.15
 Werkzeug==2.3.6
 redis==5.0.1
 Flask-Session==0.6.0
