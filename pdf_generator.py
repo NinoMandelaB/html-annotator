@@ -1,60 +1,87 @@
 """
 PDF Generator Module
-Converts HTML email templates with annotations to PDF format
+Converts annotated HTML templates to PDF format using WeasyPrint.
 """
+from weasyprint import HTML, CSS
+from io import BytesIO
 
-import pdfkit
-from html_parser import create_annotation_overlays_for_pdf
 
 def convert_annotated_html_to_pdf(html_content, annotations):
     """
-    Convert HTML content with annotations to PDF.
+    Convert HTML with annotations to PDF using WeasyPrint.
     
     Args:
-        html_content (str): Original HTML content
+        html_content (str): The original HTML content
         annotations (list): List of annotation dictionaries
         
     Returns:
-        bytes: PDF file content as bytes
+        bytes: PDF file as bytes
     """
-    # Create HTML with annotation overlays (boxes and margin text)
-    annotated_html = create_annotation_overlays_for_pdf(html_content, annotations)
-    
-    # Configure pdfkit options
-    options = {
-        'page-size': 'A4',
-        'orientation': 'Landscape',
-        'margin-top': '10mm',
-        'margin-right': '10mm',
-        'margin-bottom': '10mm',
-        'margin-left': '10mm',
-        'encoding': "UTF-8",
-        'enable-local-file-access': None,
-        'no-stop-slow-scripts': None,
-        'quiet': ''
-    }
-    
     try:
-        # Create PDF from HTML
-        pdf_bytes = pdfkit.from_string(annotated_html, False, options=options)
+        # Import the inject function from html_parser
+        from html_parser import inject_visual_annotations
+        
+        # Inject visual annotations into HTML
+        annotated_html = inject_visual_annotations(html_content, annotations)
+        
+        # Custom CSS for PDF styling
+        pdf_css = CSS(string='''
+            @page {
+                size: A4;
+                margin: 2cm;
+            }
+            
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 11pt;
+                line-height: 1.6;
+            }
+            
+            /* Annotation highlights */
+            [data-annotation-id] {
+                border: 2px solid #3498db !important;
+                background-color: rgba(52, 152, 219, 0.1) !important;
+                padding: 2px;
+                margin: 2px;
+            }
+            
+            /* Variable highlights */
+            .annotation-highlight-variable,
+            .annotation-highlight-bracket {
+                background-color: rgba(52, 152, 219, 0.15) !important;
+                border: 1px solid #3498db !important;
+                padding: 2px 4px;
+                border-radius: 3px;
+            }
+            
+            /* Link highlights */
+            .annotation-highlight-link {
+                border: 2px solid #e74c3c !important;
+                background-color: rgba(231, 76, 60, 0.1) !important;
+            }
+            
+            /* Prevent page breaks inside elements */
+            p, div, li {
+                page-break-inside: avoid;
+            }
+            
+            /* Make sure images don't break layout */
+            img {
+                max-width: 100%;
+                height: auto;
+            }
+        ''')
+        
+        # Generate PDF
+        print("📄 Generating PDF with WeasyPrint...")
+        html_obj = HTML(string=annotated_html)
+        pdf_bytes = html_obj.write_pdf(stylesheets=[pdf_css])
+        print("✅ PDF generated successfully")
+        
         return pdf_bytes
-    except OSError as e:
-        # wkhtmltopdf binary not found or path issue
-        print(f"OSError generating PDF (wkhtmltopdf issue): {e}")
-        # Try with minimal options
-        try:
-            pdf_bytes = pdfkit.from_string(annotated_html, False, options={'encoding': 'UTF-8'})
-            return pdf_bytes
-        except Exception as e2:
-            print(f"Fallback PDF generation also failed: {e2}")
-            raise Exception(f"PDF generation failed: wkhtmltopdf may not be properly installed. Error: {str(e)}")
+        
     except Exception as e:
-        print(f"Error generating PDF: {e}")
-        # Try without options as last resort
-        try:
-            pdf_bytes = pdfkit.from_string(annotated_html, False)
-            return pdf_bytes
-        except Exception as e2:
-            print(f"Final fallback failed: {e2}")
-            raise Exception(f"PDF generation failed: {str(e)}")
-
+        print(f"❌ Error generating PDF with WeasyPrint: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise Exception(f"PDF generation failed: {str(e)}")
