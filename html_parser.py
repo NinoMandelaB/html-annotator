@@ -53,6 +53,95 @@ def parse_html_and_detect_elements(html_content):
         annotations.append(annotation)
     
     # 3. Detect template variables in text content
+    text_content = soup.get_text()
+    
+    # Track already found variables to avoid duplicates
+    found_variables = set()
+    
+    # Pattern for {{variable}} - BLUE (hashVariable)
+    for match in re.finditer(r'\{\{([^}]+)\}\}', text_content):
+        variable_name = match.group(1).strip()
+        full_variable = '{{' + variable_name + '}}'
+        if full_variable not in found_variables:
+            found_variables.add(full_variable)
+            annotations.append({
+                'type': 'element',
+                'elementtype': 'hashVariable',
+                'variablename': variable_name,
+                'label': f"Variable: {variable_name}",
+                'selector': f'textvariable:{full_variable}',  # Include full {{variable}}
+            })
+    
+    # Pattern for [[variable]] - GREEN (bracketVariable)
+    for match in re.finditer(r'\[\[([^\]]+)\]\]', text_content):
+        variable_name = match.group(1).strip()
+        full_variable = '[[' + variable_name + ']]'
+        if full_variable not in found_variables:
+            found_variables.add(full_variable)
+            annotations.append({
+                'type': 'element',
+                'elementtype': 'bracketVariable',
+                'variablename': variable_name,
+                'label': f"Variable: {variable_name}",
+                'selector': f'textvariable:{full_variable}',  # Include full [[variable]]
+            })
+    
+    # Pattern for ##variable## - BLUE (hashVariable)
+    for match in re.finditer(r'##([^#]+)##', text_content):
+        variable_name = match.group(1).strip()
+        full_variable = '##' + variable_name + '##'
+        if full_variable not in found_variables:
+            found_variables.add(full_variable)
+            annotations.append({
+                'type': 'element',
+                'elementtype': 'hashVariable',
+                'variablename': variable_name,
+                'label': f"Variable: {variable_name}",
+                'selector': f'textvariable:{full_variable}',  # Include full ##variable##
+            })
+    
+    return annotations
+
+    """
+    Parse HTML and automatically detect annotatable elements.
+    Detects form fields, links, and template variables.
+    
+    Args:
+        html_content (str): Raw HTML content
+        
+    Returns:
+        list: List of detected annotation dictionaries
+    """
+    soup = BeautifulSoup(html_content, 'html.parser')
+    annotations = []
+    
+    # 1. Detect form fields (input, textarea, select, button)
+    for element in soup.find_all(['input', 'textarea', 'select', 'button']):
+        annotation = {
+            'type': 'formfield',
+            'elementtype': element.name,
+            'name': element.get('name', element.get('id', 'unnamed')),
+            'inputtype': element.get('type', element.name),
+            'label': f"{element.name.capitalize()}: {element.get('name', element.get('id', 'unnamed'))}",
+            'selector': generate_selector_for_element(element),
+        }
+        annotations.append(annotation)
+    
+    # 2. Detect links (a tags)
+    for element in soup.find_all('a'):
+        href = element.get('href', '')
+        link_text = element.get_text(strip=True)
+        
+        annotation = {
+            'type': 'link',
+            'elementtype': 'a',
+            'url': href,
+            'label': f"Link: {link_text[:50]}" if link_text else f"Link: {href[:50]}",
+            'selector': generate_selector_for_element(element),
+        }
+        annotations.append(annotation)
+    
+    # 3. Detect template variables in text content
     # Patterns: {{variable}}, [[variable]], ##variable##
     text_content = soup.get_text()
     
