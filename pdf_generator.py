@@ -25,6 +25,7 @@ def convert_annotated_html_to_pdf(html_content, annotations):
         annotated_html = inject_visual_annotations(html_content, annotations)
         
         # Add inline CSS for better PDF styling
+        # NOTE: xhtml2pdf has limited CSS support - keep it simple!
         styled_html = f'''
         <!DOCTYPE html>
         <html>
@@ -44,38 +45,27 @@ def convert_annotated_html_to_pdf(html_content, annotations):
                 }}
                 
                 /* Annotation highlights */
-                [data-annotation-id] {{
-                    border: 2px solid #3498db !important;
-                    background-color: rgba(52, 152, 219, 0.1) !important;
+                *[data-annotation-id] {{
+                    border: 2px solid #3498db;
+                    background-color: #e3f2fd;
                     padding: 2px;
                     margin: 2px;
-                    display: inline-block;
                 }}
                 
                 /* Variable highlights */
                 .annotation-highlight-variable,
                 .annotation-highlight-bracket {{
-                    background-color: #e3f2fd !important;
-                    border: 1px solid #2196F3 !important;
+                    background-color: #e3f2fd;
+                    border: 1px solid #2196F3;
                     padding: 2px 4px;
-                    border-radius: 3px;
-                    font-family: monospace;
+                    font-family: Courier, monospace;
                 }}
                 
                 /* Link highlights */
                 .annotation-highlight-link {{
-                    border: 2px solid #e74c3c !important;
-                    background-color: #ffebee !important;
+                    border: 2px solid #e74c3c;
+                    background-color: #ffebee;
                     color: #c62828;
-                }}
-                
-                /* Prevent awkward page breaks */
-                p, div, li {{
-                    page-break-inside: avoid;
-                }}
-                
-                h1, h2, h3, h4, h5, h6 {{
-                    page-break-after: avoid;
                 }}
                 
                 /* Make sure images don't break layout */
