@@ -444,4 +444,3 @@ def create_annotation_overlays_for_pdf(html_content, annotations):
         soup.body.append(container)
     
     return str(soup)
-
