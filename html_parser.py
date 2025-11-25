@@ -354,6 +354,11 @@ def create_annotation_overlays_for_pdf(html_content, annotations):
     Create visual overlays for PDF generation (email template style).
     Adds colored boxes and margin text boxes.
     
+    Color scheme:
+    - Links: RED (#e74c3c)
+    - Bracket variables [[var]]: GREEN (#4caf50)
+    - Hash variables ##var## / {{var}}: BLUE (#2196f3)
+    
     Args:
         html_content (str): Original HTML content
         annotations (list): List of annotation dictionaries
@@ -390,11 +395,21 @@ def create_annotation_overlays_for_pdf(html_content, annotations):
         # Add annotations to margin
         annotation_counter = 1
         for annotation in annotations:
-            # Determine color based on type
-            if annotation['type'] == 'link':
+            # Determine color based on type AND elementtype
+            if annotation.get('type') == 'link':
+                # Links = RED
                 badge_color = '#e74c3c'
                 type_label = 'Link'
-            else:  # element
+            elif annotation.get('elementtype') == 'bracketVariable':
+                # Bracket variables [[var]] = GREEN
+                badge_color = '#4caf50'
+                type_label = 'Placeholder'
+            elif annotation.get('elementtype') == 'hashVariable':
+                # Hash variables ##var## and {{var}} = BLUE
+                badge_color = '#2196f3'
+                type_label = 'Variable'
+            else:
+                # Default = BLUE
                 badge_color = '#3498db'
                 type_label = 'Element'
             
@@ -415,24 +430,23 @@ def create_annotation_overlays_for_pdf(html_content, annotations):
             
             # Label
             label_span = soup.new_tag('div', style='margin-top: 5px; font-weight: 600;')
-            label_span.string = annotation['label']
+            label_span.string = annotation.get('label', 'Unnamed')
             margin_item.append(label_span)
             
             # Additional details based on type
-            if annotation['type'] == 'link' and annotation.get('url'):
+            if annotation.get('type') == 'link' and annotation.get('url'):
                 url_span = soup.new_tag('div', style='margin-top: 3px; color: #3498db; word-break: break-all; font-size: 9px;')
                 url_span.string = f"URL: {annotation['url']}"
                 margin_item.append(url_span)
-            
-            elif annotation['type'] == 'element':
-                if annotation.get('variable_name'):
-                    var_span = soup.new_tag('div', style='margin-top: 3px; color: #666; font-family: monospace; font-size: 9px;')
-                    var_span.string = f"Variable: {annotation['variable_name']}"
-                    margin_item.append(var_span)
-                elif annotation.get('name'):
-                    name_span = soup.new_tag('div', style='margin-top: 3px; color: #666; font-size: 9px;')
-                    name_span.string = f"Name: {annotation['name']}"
-                    margin_item.append(name_span)
+            elif annotation.get('variablename'):
+                # Note: key is 'variablename' not 'variable_name'
+                var_span = soup.new_tag('div', style='margin-top: 3px; color: #666; font-family: monospace; font-size: 9px;')
+                var_span.string = f"Variable: {annotation['variablename']}"
+                margin_item.append(var_span)
+            elif annotation.get('name'):
+                name_span = soup.new_tag('div', style='margin-top: 3px; color: #666; font-size: 9px;')
+                name_span.string = f"Name: {annotation['name']}"
+                margin_item.append(name_span)
             
             margin_area.append(margin_item)
             annotation_counter += 1
