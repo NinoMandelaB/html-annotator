@@ -900,6 +900,7 @@ async function saveNewAnnotation() {
         alert('Please fill in all required fields');
         return;
     }
+}
 
 
 
