@@ -78,7 +78,8 @@ def parse_html_and_detect_elements(html_content):
             'selector': f'textvariable:[[{variable_name}]]',  # Special selector for JS
         })
     
-    # Pattern for ##variable##
+
+    # Pattern for ##variable## (double hash)
     for match in re.finditer(r'##([^#]+)##', text_content):
         variable_name = match.group(1).strip()
         annotations.append({
@@ -86,8 +87,9 @@ def parse_html_and_detect_elements(html_content):
             'elementtype': 'hashVariable',
             'variablename': variable_name,
             'label': f"Variable: {variable_name}",
-            'selector': f'textvariable:#{variable_name}#',  # Special selector for JS
+            'selector': f'textvariable:##{ variable_name}##',  # Must match actual text with ##
         })
+
     
     return annotations
 
