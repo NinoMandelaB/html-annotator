@@ -364,3 +364,23 @@ def create_annotation_overlays_for_pdf(html_content, annotations):
                         var_span = soup.new_tag('div', style='margin-top: 3px; color: #666; font-family: monospace; font-size: 9px;')
                         var_span.string = f"Variable: {annotation['variablename']}"
                         margin_item.append(var_span)
+                    elif annotation.get('name'):
+                        name_span = soup.new_tag('div', style='margin-top: 3px; color: #666; font-size: 9px;')
+                        name_span.string = f"Name: {annotation['name']}"
+                        margin_item.append(name_span)
+                
+                margin_area.append(margin_item)
+                annotation_counter += 1
+                
+            except Exception as e:
+                print(f"Error processing annotation for selector {selector}: {e}")
+                continue
+        
+        # Assemble the layout
+        container.append(content_area)
+        container.append(margin_area)
+        soup.body.clear()
+        soup.body.append(container)
+    
+    return str(soup)
+
