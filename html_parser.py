@@ -12,138 +12,112 @@ import uuid
 def parse_html_and_detect_elements(html_content):
     """
     Parse HTML EMAIL TEMPLATE content and detect annotatable elements.
-    
-    Email-specific logic:
-    - Recognizes customText blocks as single units
-    - Handles variables inside links correctly
-    - Avoids duplicate annotations for nested structures
-    
-    Args:
-        html_content (str): The HTML content to parse
-        
-    Returns:
-        list: List of annotation dictionaries
     """
     soup = BeautifulSoup(html_content, 'html.parser')
     annotations = []
-    annotated_elements = set()  # Track what we've already annotated
+    annotated_elements = set()
     
-    
-
-    # Step 1: Detect ##variable## and [text] patterns (for blue highlighting)
-    # These patterns are used in email templates to mark dynamic content
-    
-    # Pattern 1: ##variableName## format  
-    # CREATE ANNOTATION FOR EVERY INSTANCE (no deduplication)
+    # Pattern 1: ##variableName## format
+    # CREATE ANNOTATION FOR EVERY INSTANCE with occurrence index
     hash_variable_pattern = re.compile(r'##([^#]+)##')
     hash_matches = hash_variable_pattern.finditer(str(soup))
-    
     instance_counter = {}  # Track instances for unique IDs
+    
     for match in hash_matches:
         var_content = match.group(1)
         full_text = match.group(0)  # ##variableName##
         
-        # Create unique instance ID
+        # Track which occurrence this is (0-indexed)
         if var_content not in instance_counter:
             instance_counter[var_content] = 0
-        instance_counter[var_content] += 1
-        instance_id = f"{var_content}_inst{instance_counter[var_content]}"
+        else:
+            instance_counter[var_content] += 1
+        
+        occurrence_index = instance_counter[var_content]
         
         annotation = {
             "id": str(uuid.uuid4()),
             "type": "element",
             "element_type": "hashVariable",
             "input_type": "variable",
-            "selector": f':textvariable("{full_text}")',  # Custom selector for JS
+            "selector": f':textvariable("{full_text}")',
+            "occurrence_index": occurrence_index,  # ADD THIS
             "name": var_content,
             "element_id": "",
-            "label": f"Variable: {var_content}",
+            "label": f"Variable: {var_content} (occurrence {occurrence_index + 1})",  # UPDATE LABEL
             "text": full_text,
             "variable_name": var_content,
             "url": None,
             "comments": ""
         }
+        
         annotations.append(annotation)
-
     
     # Pattern 2: [text] format (square brackets)
-    # CREATE ANNOTATION FOR EVERY INSTANCE (no deduplication)
-    # IMPORTANT: Remove HTML comments first to avoid matching [if mso], [endif], etc.
-    
-    # Remove HTML comments from the content before searching
     html_without_comments = re.sub(r'<!--.*?-->', '', str(soup), flags=re.DOTALL)
-    
     bracket_pattern = re.compile(r'\[([^\]]+)\]')
     bracket_matches = bracket_pattern.finditer(html_without_comments)
+    bracket_counter = {}
     
-    bracket_counter = {}  # Track instances for unique IDs
     for match in bracket_matches:
         bracket_content = match.group(1)
-        full_text = match.group(0)  # [text]
+        full_text = match.group(0)
         
-        # Skip if it looks like HTML attribute or contains HTML tags
+        # Skip HTML-like patterns
         if '=' in bracket_content or '<' in bracket_content or '>' in bracket_content:
             continue
         
-        #Enhanced filter for ALL Outlook conditional comment patterns
+        # Enhanced filter for Outlook patterns
         lower_content = bracket_content.lower()
         outlook_patterns = ['if', 'endif', 'else', 'owa', '!owa', 'mso', '!mso', 'vml', 'gte']
         if any(pattern in lower_content for pattern in outlook_patterns):
             continue
-            
-        # Create unique instance ID
+        
+        # Track which occurrence this is
         if bracket_content not in bracket_counter:
             bracket_counter[bracket_content] = 0
+        else:
             bracket_counter[bracket_content] += 1
+        
+        occurrence_index = bracket_counter[bracket_content]
         
         annotation = {
             "id": str(uuid.uuid4()),
             "type": "element",
             "element_type": "bracketVariable",
             "input_type": "variable",
-            "selector": f':textvariable("{full_text}")',  # Custom selector for JS
+            "selector": f':textvariable("{full_text}")',
+            "occurrence_index": occurrence_index,  # ADD THIS
             "name": bracket_content,
             "element_id": "",
-            "label": f"Placeholder: {bracket_content}",
+            "label": f"Placeholder: {bracket_content} (occurrence {occurrence_index + 1})",  # UPDATE LABEL
             "text": full_text,
             "variable_name": bracket_content,
             "url": None,
             "comments": ""
         }
+        
         annotations.append(annotation)
-
-
     
-   
-    
-    # Step 3: Detect hyperlinks (LAST, to capture everything including variables in href)
+    # Links remain the same (no duplicates expected)
     links = soup.find_all('a', href=True)
-    
     for link in links:
         href = link.get('href', '')
         link_text = link.get_text(strip=True)
         
-        # Skip empty or anchor-only links
         if not href or href.startswith('#'):
             continue
         
-        # Generate unique key for this link
         link_key = f"link_{href}_{link_text}"
         if link_key in annotated_elements:
             continue
+        
         annotated_elements.add(link_key)
-        
-        # Generate CSS selector
         selector = generate_css_selector(link)
-        
-        # Determine if it's an email link
         is_email = href.startswith('mailto:')
-        
-        # Check if href or link text contains template variables
         href_has_var = '{{' in href and '}}' in href
         text_has_var = '{{' in link_text and '}}' in link_text
         
-        # Create detailed label
         if href_has_var and text_has_var:
             label = f"Link: {link_text[:50]} (dynamic URL and text)"
         elif href_has_var:
@@ -166,14 +140,16 @@ def parse_html_and_detect_elements(html_content):
             "url": href,
             "is_email": is_email,
             "contains_variable": href_has_var or text_has_var,
-            "comments": ""  # New field for user comments   
+            "comments": ""
         }
+        
         annotations.append(annotation)
     
     return annotations
 
 
-211
+
+
 def generate_css_selector(element):
     """
     Generate a unique CSS selector for an element.

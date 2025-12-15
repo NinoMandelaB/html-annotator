@@ -128,6 +128,49 @@ def wrap_text_occurrence(soup, text_to_find, occurrence_index, custom_color):
                 index = pos + 1
 
 
+def wrap_specific_occurrence_in_element(container, soup, text_to_find, occurrence_index, bg_color, border_color):
+    """Wrap a specific occurrence of text with styled span within a container"""
+    current_occurrence = 0
+    
+    for element in container.find_all(text=lambda t: t and text_to_find in str(t)):
+        if isinstance(element, NavigableString):
+            parent = element.parent
+            
+            if parent is None or parent.name in ['script', 'style']:
+                continue
+            
+            text = str(element)
+            index = 0
+            
+            while index < len(text):
+                pos = text.find(text_to_find, index)
+                if pos == -1:
+                    break
+                
+                # Check if this is the occurrence we want
+                if current_occurrence == occurrence_index:
+                    before = text[:pos]
+                    match = text[pos:pos + len(text_to_find)]
+                    after = text[pos + len(text_to_find):]
+                    
+                    parent.clear()
+                    if before:
+                        parent.append(NavigableString(before))
+                    
+                    span = soup.new_tag('span')
+                    span['style'] = f'background-color: {bg_color}; border: 2px solid {border_color}; padding: 3px;'
+                    span.string = match
+                    parent.append(span)
+                    
+                    if after:
+                        parent.append(NavigableString(after))
+                    
+                    return  # Done - found and highlighted the right one
+                
+                current_occurrence += 1
+                index = pos + 1
+
+
 
 @app.route("/", methods=["GET"])
 def index():
@@ -416,6 +459,7 @@ def generate_pdfs():
                                     if match:
                                         variable_text = match.group(1)
                                         element_type = annotation.get('element_type', 'hashVariable')
+                                        occurrence_index = annotation.get('occurrence_index', 0)  # GET THE INDEX
                                         
                                         # Choose color based on variable type
                                         if element_type == 'bracketVariable':
@@ -425,9 +469,17 @@ def generate_pdfs():
                                             bg_color = '#e3f2fd'
                                             border_color = '#2196f3'
                                         
-                                        # Find and wrap all occurrences in content area only
-                                        wrap_text_in_element(content_area, soup, variable_text, bg_color, border_color)
-                                        print(f"  ✓ Highlighted variable: {variable_text}")
+                                        # Highlight ONLY the specific occurrence
+                                        wrap_specific_occurrence_in_element(
+                                            content_area, 
+                                            soup, 
+                                            variable_text, 
+                                            occurrence_index,
+                                            bg_color, 
+                                            border_color
+                                        )
+                                        print(f"  ✓ Highlighted variable: {variable_text} (occurrence {occurrence_index + 1})")
+
                                 
                                 # Handle textselection: custom highlights using regex
                                 elif ':textselection(' in selector:
