@@ -876,7 +876,7 @@ async function deleteAnnotation(annotationId) {
 
 // Save new annotation
 async function saveNewAnnotation() {
-  const type = document.getElementById('addType').value;
+  const type = document.getElementById('addType').value;      // should be "element" for text selections
   const label = document.getElementById('addLabel').value;
   const selector = document.getElementById('addSelector').value;
 
@@ -888,25 +888,31 @@ async function saveNewAnnotation() {
     return;
   }
 
+  const occurrenceIndex = currentTextSelection
+    ? currentTextSelection.occurrenceIndex
+    : 0;  // fall back to 0 if something went wrong
+
   const newAnnotation = {
     id: Date.now().toString(),
-    type,
+    type: 'element',                 // match existing custom annotations
     label,
-    selector,
-    customColor,
-    elementtype: 'textSelection',
+    selector,                        // must start with "textselection"
+    elementtype: 'textSelection',    // critical for the textSelection branch
     inputtype: 'textSelection',
-    occurrenceIndex: currentTextSelection ? currentTextSelection.occurrenceIndex : 0
+    customColor,
+    occurrenceIndex
   };
 
   currentAnnotations.push(newAnnotation);
   await saveAnnotations();
   displayAnnotations();
+  loadFile(currentFileId);           // reload to re-apply highlights
 
   const modalEl = document.getElementById('addModal');
   const modal = bootstrap.Modal.getInstance(modalEl);
   if (modal) modal.hide();
 }
+
 
 
 
