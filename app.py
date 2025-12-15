@@ -6,6 +6,7 @@ import zipfile
 import io
 import json
 import uuid
+import re
 from werkzeug.utils import secure_filename
 from html_parser import parse_html_and_detect_elements, inject_visual_annotations
 from pdf_generator import convert_annotated_html_to_pdf
@@ -45,6 +46,9 @@ def allowed_file(filename):
 
 def wrap_text_with_style(soup, text_to_find, bg_color, border_color):
     """Wrap all occurrences of text with styled span"""
+    # Escape special regex characters in the text
+    import re
+    
     for element in soup.find_all(text=lambda t: t and text_to_find in str(t)):
         if isinstance(element, NavigableString):
             parent = element.parent
@@ -57,13 +61,19 @@ def wrap_text_with_style(soup, text_to_find, bg_color, border_color):
                 continue
                 
             parts = text.split(text_to_find)
+            
+            # Only proceed if we found actual splits
+            if len(parts) <= 1:
+                continue
+                
             parent.clear()
             
             for i, part in enumerate(parts):
                 if part:
                     parent.append(NavigableString(part))
                 if i < len(parts) - 1:
-                    span = soup.new_tag('span', style=f'background-color: {bg_color}; border: 1px solid {border_color}; padding: 2px;')
+                    span = soup.new_tag('span')
+                    span['style'] = f'background-color: {bg_color}; border: 1px solid {border_color}; padding: 2px;'
                     span.string = text_to_find
                     parent.append(span)
 
@@ -96,8 +106,9 @@ def wrap_text_occurrence(soup, text_to_find, occurrence_index, custom_color):
                     if before:
                         parent.append(NavigableString(before))
                     
-                    # Convert hex to rgba with transparency
-                    span = soup.new_tag('span', style=f'background-color: {custom_color}; border: 1px solid {custom_color}; padding: 2px; opacity: 0.6;')
+                    # Create span with custom color
+                    span = soup.new_tag('span')
+                    span['style'] = f'background-color: {custom_color}; border: 1px solid {custom_color}; padding: 2px; opacity: 0.6;'
                     span.string = match
                     parent.append(span)
                     
@@ -366,40 +377,49 @@ def generate_pdfs():
                         for annotation in file_data['annotations']:
                             selector = annotation.get('selector', '')
                             
-                            # Handle linktext: selectors
-                            if 'linktext:' in selector:
-                                link_text = selector.split('linktext:')[1].strip('"\'')
-                                for link in soup.find_all('a'):
-                                    if link.get_text(strip=True) == link_text:
-                                        link['style'] = 'background-color: #ffebee; border: 1px solid #e74c3c; padding: 2px;'
-                                        print(f"  ✓ Highlighted link: {link_text}")
+                            # Handle linktext: selectors using regex
+                            if ':linktext(' in selector:
+                                # Extract text between :linktext(" and ")
+                                match = re.search(r':linktext\(["\'](.+?)["\']\)', selector)
+                                if match:
+                                    link_text = match.group(1)
+                                    for link in soup.find_all('a'):
+                                        if link.get_text(strip=True) == link_text:
+                                            link['style'] = 'background-color: #ffebee; border: 1px solid #e74c3c; padding: 2px;'
+                                            print(f"  ✓ Highlighted link: {link_text}")
                             
-                            # Handle textvariable: selectors (e.g., {{var}} or #var#)
-                            elif 'textvariable:' in selector:
-                                variable_text = selector.split('textvariable:')[1].strip('"\'')
-                                element_type = annotation.get('elementtype', 'hashVariable')
-                                
-                                # Choose color based on variable type
-                                if element_type == 'bracketVariable':
-                                    bg_color = '#e8f5e9'
-                                    border_color = '#4caf50'
-                                else:  # hashVariable
-                                    bg_color = '#e3f2fd'
-                                    border_color = '#2196f3'
-                                
-                                # Find and wrap all occurrences
-                                wrap_text_with_style(soup, variable_text, bg_color, border_color)
-                                print(f"  ✓ Highlighted variable: {variable_text}")
+                            # Handle textvariable: selectors using regex
+                            elif ':textvariable(' in selector:
+                                # Extract text between :textvariable(" and ")
+                                match = re.search(r':textvariable\(["\'](.+?)["\']\)', selector)
+                                if match:
+                                    variable_text = match.group(1)  # This includes ##text## or [text]
+                                    element_type = annotation.get('element_type', 'hashVariable')
+                                    
+                                    # Choose color based on variable type
+                                    if element_type == 'bracketVariable':
+                                        bg_color = '#e8f5e9'
+                                        border_color = '#4caf50'
+                                    else:  # hashVariable
+                                        bg_color = '#e3f2fd'
+                                        border_color = '#2196f3'
+                                    
+                                    # Find and wrap all occurrences
+                                    wrap_text_with_style(soup, variable_text, bg_color, border_color)
+                                    print(f"  ✓ Highlighted variable: {variable_text}")
                             
-                            # Handle textselection: custom highlights
-                            elif 'textselection:' in selector:
-                                selected_text = selector.split('textselection:')[1].strip('"\'')
-                                custom_color = annotation.get('customColor', '#9b59b6')
-                                occurrence_index = annotation.get('occurrenceIndex', 0)
-                                
-                                # Wrap specific occurrence with custom color
-                                wrap_text_occurrence(soup, selected_text, occurrence_index, custom_color)
-                                print(f"  ✓ Highlighted text selection: {selected_text[:30]}...")
+                            # Handle textselection: custom highlights using regex
+                            elif ':textselection(' in selector:
+                                # Extract text between :textselection(" and ")
+                                match = re.search(r':textselection\(["\'](.+?)["\']\)', selector)
+                                if match:
+                                    selected_text = match.group(1)
+                                    custom_color = annotation.get('customColor', '#9b59b6')
+                                    occurrence_index = annotation.get('occurrenceIndex', 0)
+                                    
+                                    # Wrap specific occurrence with custom color
+                                    wrap_text_occurrence(soup, selected_text, occurrence_index, custom_color)
+                                    print(f"  ✓ Highlighted text selection: {selected_text[:30]}...")
                             
                             # Handle regular CSS selectors
                             elif selector:
