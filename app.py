@@ -46,12 +46,14 @@ def allowed_file(filename):
 
 def wrap_text_with_style(soup, text_to_find, bg_color, border_color):
     """Wrap all occurrences of text with styled span"""
-    # Escape special regex characters in the text
-    import re
-    
     for element in soup.find_all(text=lambda t: t and text_to_find in str(t)):
         if isinstance(element, NavigableString):
             parent = element.parent
+            
+            # Safety check: ensure parent exists
+            if parent is None:
+                continue
+                
             if parent.name in ['script', 'style']:
                 continue
             
@@ -85,6 +87,11 @@ def wrap_text_occurrence(soup, text_to_find, occurrence_index, custom_color):
     for element in soup.find_all(text=lambda t: t and text_to_find in str(t)):
         if isinstance(element, NavigableString):
             parent = element.parent
+            
+            # Safety check: ensure parent exists
+            if parent is None:
+                continue
+                
             if parent.name in ['script', 'style']:
                 continue
             
@@ -119,6 +126,7 @@ def wrap_text_occurrence(soup, text_to_find, occurrence_index, custom_color):
                 
                 current_occurrence += 1
                 index = pos + 1
+
 
 
 @app.route("/", methods=["GET"])
