@@ -947,7 +947,23 @@ async function saveNewAnnotation() {
 }
 
 
+// Highlight annotation
+function highlightAnnotation(annotationId, occurrenceIndex) {
+    const selector = occurrenceIndex !== undefined
+        ? `[data-annotation-id="${annotationId}"][data-occurrence-index="${occurrenceIndex}"]`
+        : `[data-annotation-id="${annotationId}"]`;
+    const item = document.querySelector(selector);
+    if (item) item.style.backgroundColor = '#fff3cd';
+}
 
+// Unhighlight annotation
+function unhighlightAnnotation(annotationId, occurrenceIndex) {
+    const selector = occurrenceIndex !== undefined
+        ? `[data-annotation-id="${annotationId}"][data-occurrence-index="${occurrenceIndex}"]`
+        : `[data-annotation-id="${annotationId}"]`;
+    const item = document.querySelector(selector);
+    if (item) item.style.backgroundColor = '';
+}
 
 
 
@@ -968,24 +984,7 @@ async function saveAnnotations() {
     }
 }
 
-// Unhighlight annotation
-function unhighlightAnnotation(annotationId, occurrenceIndex) {
-    const selector = occurrenceIndex !== undefined
-        ? `[data-annotation-id="${annotationId}"][data-occurrence-index="${occurrenceIndex}"]`
-        : `[data-annotation-id="${annotationId}"]`;
-    const item = document.querySelector(selector);
-    if (item) item.style.backgroundColor = '';
-}
 
-
-
-// Unhighlight annotation
-function unhighlightAnnotation(annotationId) {
-    const item = document.querySelector(`[data-annotation-id="${annotationId}"]`);
-    if (item) {
-        item.style.backgroundColor = '';
-    }
-}
 
 // Zoom functions
 function zoomIn() {
