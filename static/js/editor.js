@@ -215,154 +215,159 @@ function applyVisualHighlights(iframeDoc) {
     let highlightedCount = 0;
     let skippedCount = 0;
     let notFoundCount = 0;
-    
-    console.log(`Attempting to highlight ${currentAnnotations.length} annotations...`);
-    
+
+    console.log('Attempting to highlight', currentAnnotations.length, 'annotations...');
+
     currentAnnotations.forEach(annotation => {
         const selector = annotation.selector;
-        
-        // CRITICAL FIX: Skip annotations without selectors
-        // These are text-level annotations (customText, variables) that cannot be highlighted
+
+        // Skip annotations without selectors: these are text-level annotations
         if (!selector) {
-            console.log(`Skipped ${annotation.label} - no selector (${annotation.elementtype})`);
+            console.log('Skipped', annotation.label, '- no selector', annotation.elementtype);
             skippedCount++;
             return;
         }
-        
+
         try {
-            // Find element in iframe using CSS selector
-            // IMPROVED: Handle custom selectors for email templates
             let element = null;
-            
-            // Check for custom linktext selector
+
+            // Custom selector: linktext("...")
             if (selector.includes('linktext')) {
-                const match = selector.match(/linktext\("(.+?)"\)/);
+                const match = selector.match(/:linktext\(\"(.+?)\"\)/);
                 if (match) {
                     const linkText = match[1];
-                    // Find link by text content
                     const links = Array.from(iframeDoc.querySelectorAll('a'));
                     element = links.find(a => a.textContent.trim() === linkText.trim());
                 }
             }
-            // Check for custom textvariable selector
+            // Custom selector: textvariable("##accFname##") / "[accFname]"
             else if (selector.includes('textvariable')) {
-                const match = selector.match(/textvariable\("(.+?)"\)/);
+                const match = selector.match(/:textvariable\(\"(.+?)\"\)/);
                 if (match) {
                     const variableText = match[1];
-                    
-                    // Find all text nodes in the document
+
+                    // Walk all text nodes and wrap every occurrence of this variable
                     const walker = iframeDoc.createTreeWalker(
                         iframeDoc.body,
                         NodeFilter.SHOW_TEXT,
                         null,
                         false
                     );
-                    
+
                     let node;
-                    const nodesToProcess = []; // Collect nodes first to avoid DOM modification issues
-                    
-                    // First pass: collect all text nodes that contain the variable
-                    while (node = walker.nextNode()) {
-                        if (node.textContent.includes(variableText)) {
-                            const parent = node.parentNode;
-                            if (parent && parent.nodeName !== 'SCRIPT' && parent.nodeName !== 'STYLE') {
-                                // Don't process if already wrapped
-                                if (!parent.classList || !parent.classList.contains('annotation-highlight-variable')) {
-                                    nodesToProcess.push(node);
-                                }
-                            }
+                    const nodesToProcess = [];
+
+                    // First pass: collect nodes that contain the variable
+                    while ((node = walker.nextNode())) {
+                        if (!node.textContent || !node.textContent.includes(variableText)) continue;
+                        const parent = node.parentNode;
+                        if (!parent) continue;
+                        if (parent.nodeName === 'SCRIPT' || parent.nodeName === 'STYLE') continue;
+
+                        // Don't process if parent is already a highlighted variable container
+                        if (!parent.classList || parent.classList.contains('annotation-highlight-variable') || parent.classList.contains('annotation-highlight-bracket')) {
+                            nodesToProcess.push(node);
+                        } else {
+                            nodesToProcess.push(node);
                         }
                     }
-                    
+
                     // Second pass: wrap all occurrences in each text node
                     nodesToProcess.forEach(node => {
                         const parent = node.parentNode;
+                        if (!parent) return;
+
                         const text = node.textContent;
-                        
-                        // Find ALL occurrences in this text node
-                        if (text.includes(variableText)) {
-                            const parts = text.split(variableText);
-                            const fragment = iframeDoc.createDocumentFragment();
-                            
-                            parts.forEach((part, index) => {
-                                // Add the text before the variable
-                                if (part) {
-                                    fragment.appendChild(iframeDoc.createTextNode(part));
-                                }
-                                
-                                // Add the variable (except after the last part)
-                                if (index < parts.length - 1) {
-                                    const span = iframeDoc.createElement('span');
-                                    // ⭐ CRITICAL FIX: Check elementType from annotation, not variable text pattern
-                                    const isBracketVariable = (annotation.elementtype === 'bracketVariable');
-                                    span.className = isBracketVariable ? 'annotation-highlight-bracket' : 'annotation-highlight-variable';
-                                    span.setAttribute('data-annotation-id', annotation.id);
-                                    span.textContent = variableText;
-                                    fragment.appendChild(span);
-                                }
-                            });
-                            
-                            parent.replaceChild(fragment, node);
-                            if (!element) {
-                                element = parent.querySelector(`[data-annotation-id="${annotation.id}"]`);
+                        if (!text || !text.includes(variableText)) return;
+
+                        const parts = text.split(variableText);
+                        if (parts.length <= 1) return;
+
+                        const fragment = iframeDoc.createDocumentFragment();
+
+                        const isBracketVariable = annotation.elementtype === 'bracketVariable';
+
+                        parts.forEach((part, index) => {
+                            // text before the variable
+                            if (part) {
+                                fragment.appendChild(iframeDoc.createTextNode(part));
                             }
-                            console.log(`✅ Wrapped ${parts.length - 1} instance(s) of "${variableText}" as ${annotation.elementtype}`);
-                        }
+
+                            // variable itself (not after the last part)
+                            if (index < parts.length - 1) {
+                                const span = iframeDoc.createElement('span');
+                                span.className = isBracketVariable
+                                    ? 'annotation-highlight-bracket'
+                                    : 'annotation-highlight-variable';
+                                // Use the unique annotation id for this occurrence
+                                span.setAttribute('data-annotation-id', annotation.id);
+                                span.textContent = variableText;
+                                fragment.appendChild(span);
+                            }
+                        });
+
+                        parent.replaceChild(fragment, node);
                     });
+
+                    // For statistics / logging, grab one wrapped span
+                    element = iframeDoc.querySelector(`[data-annotation-id="${annotation.id}"]`);
+                    if (element) {
+                        console.log(
+                            'Wrapped variable',
+                            annotation.variableName || annotation.name,
+                            'as',
+                            annotation.elementtype,
+                            'with id',
+                            annotation.id
+                        );
+                    }
                 }
             }
-            // Check for custom textselection selector for user-selected text
+            // Custom selector: textselection("...")
             else if (selector.includes('textselection')) {
-                const match = selector.match(/textselection\("(.+?)"\)/);
+                const match = selector.match(/:textselection\(\"(.+?)\"\)/);
                 if (match) {
                     const selectedText = match[1];
-                    const customColor = annotation.customColor || '#9b59b6'; // Get custom color
-                    
-                    // ⭐ CRITICAL FIX: Use occurrence index to find the correct instance
+                    const customColor = annotation.customColor || '#9b59b6';
                     const occurrenceIndex = annotation.occurrenceIndex || 0;
-                    
-                    // Find ALL occurrences of this text
+
                     const walker = iframeDoc.createTreeWalker(
                         iframeDoc.body,
                         NodeFilter.SHOW_TEXT,
                         null,
                         false
                     );
-                    
+
                     let node;
                     let currentOccurrence = 0;
                     let found = false;
-                    
-                    while (node = walker.nextNode()) {
+
+                    while ((node = walker.nextNode())) {
                         if (found) break;
-                        
                         const text = node.textContent;
+                        if (!text || !text.includes(selectedText)) continue;
+
                         let searchIndex = 0;
-                        
-                        // Find all occurrences in this text node
                         while (searchIndex < text.length) {
                             const index = text.indexOf(selectedText, searchIndex);
                             if (index === -1) break;
-                            
-                            // Check if this is the occurrence we want
+
                             if (currentOccurrence === occurrenceIndex) {
-                                // Found the right occurrence - wrap it
                                 const parent = node.parentNode;
-                                if (parent.nodeName === 'SCRIPT' || parent.nodeName === 'STYLE') {
+                                if (!parent || parent.nodeName === 'SCRIPT' || parent.nodeName === 'STYLE') {
                                     searchIndex = index + 1;
                                     continue;
                                 }
-                                
+
                                 const before = text.substring(0, index);
                                 const matchText = text.substring(index, index + selectedText.length);
                                 const after = text.substring(index + selectedText.length);
-                                
+
                                 const span = iframeDoc.createElement('span');
                                 span.className = 'annotation-highlight-custom';
                                 span.setAttribute('data-annotation-id', annotation.id);
                                 span.textContent = matchText;
-                                
-                                // Apply custom color using inline styles
+
                                 const rgb = hexToRgb(customColor);
                                 span.style.cssText = `
                                     outline: 3px solid ${customColor} !important;
@@ -375,76 +380,76 @@ function applyVisualHighlights(iframeDoc) {
                                     border-radius: 3px !important;
                                     cursor: pointer;
                                 `;
-                                
+
                                 const beforeNode = iframeDoc.createTextNode(before);
                                 const afterNode = iframeDoc.createTextNode(after);
-                                
+
                                 parent.insertBefore(beforeNode, node);
                                 parent.insertBefore(span, node);
                                 parent.insertBefore(afterNode, node);
                                 parent.removeChild(node);
-                                
+
                                 element = span;
                                 found = true;
-                                console.log(`✅ Highlighted occurrence #${occurrenceIndex} of "${selectedText}"`);
+                                console.log('Highlighted occurrence', occurrenceIndex, 'of selected text');
                                 break;
                             }
-                            
+
                             currentOccurrence++;
                             searchIndex = index + 1;
                         }
                     }
-                    
+
                     if (!found) {
-                        console.warn(`Could not find occurrence #${occurrenceIndex} of "${selectedText}"`);
+                        console.warn(
+                            'Could not find occurrence',
+                            occurrenceIndex,
+                            'of selected text for annotation id',
+                            annotation.id
+                        );
                     }
                 }
             }
+            // Standard CSS selector path (form fields, links, etc.)
             else {
-                // Use standard querySelector
                 element = iframeDoc.querySelector(selector);
+                if (element) {
+                    element.setAttribute('data-annotation-id', annotation.id);
+
+                    let highlightClass = 'annotation-highlight-element';
+                    if (annotation.type === 'link') {
+                        highlightClass = 'annotation-highlight-link';
+                    } else if (selector.includes('textvariable')) {
+                        const isBracketVariable = annotation.elementtype === 'bracketVariable';
+                        highlightClass = isBracketVariable
+                            ? 'annotation-highlight-bracket'
+                            : 'annotation-highlight-variable';
+                    }
+
+                    element.classList.add(highlightClass);
+
+                    if (!element.style.position || element.style.position === 'static') {
+                        element.style.position = 'relative';
+                    }
+                }
             }
-            
+
             if (element) {
-                // Add annotation ID
-                element.setAttribute('data-annotation-id', annotation.id);
-                
-                // Determine highlight class based on type
-                let highlightClass = 'annotation-highlight-element';
-                if (annotation.type === 'link') {
-                    highlightClass = 'annotation-highlight-link';
-                } else if (selector.includes('textvariable')) {
-                    // Check if it's a bracket variable or hash variable
-                    const isBracketVariable = annotation.elementtype === 'bracketVariable';
-                    highlightClass = isBracketVariable ? 'annotation-highlight-bracket' : 'annotation-highlight-variable';
-                }
-                
-                // Add highlight class
-                element.classList.add(highlightClass);
-                
-                // Ensure position relative for potential badges
-                if (!element.style.position || element.style.position === 'static') {
-                    element.style.position = 'relative';
-                }
-                
                 highlightedCount++;
-                console.log(`✅ Highlighted ${annotation.type}: ${selector}`);
             } else {
-                console.warn(`Element not found for selector: ${selector}`);
                 notFoundCount++;
             }
         } catch (error) {
-            console.error(`Error highlighting ${selector}:`, error);
+            console.error('Error highlighting selector', annotation.selector, error);
         }
     });
-    
-    console.log('=== Highlighting Summary ===');
-    console.log(`✅ Highlighted: ${highlightedCount}`);
-    console.log(`⏭️ Skipped (no selector): ${skippedCount}`);
-    console.log(`❌ Not found: ${notFoundCount}`);
-    console.log(`📊 Total annotations: ${currentAnnotations.length}`);
-}
 
+    console.log('Highlighting Summary');
+    console.log('  Highlighted:', highlightedCount);
+    console.log('  Skipped (no selector):', skippedCount);
+    console.log('  Not found:', notFoundCount);
+    console.log('  Total annotations:', currentAnnotations.length);
+}
 
 
 
@@ -502,9 +507,9 @@ function generateSelectorForElement(element) {
 function displayAnnotations() {
     const container = document.getElementById('annotationList');
     const count = document.getElementById('annotationCount');
-    
+
     count.textContent = currentAnnotations.length;
-    
+
     if (currentAnnotations.length === 0) {
         container.innerHTML = `
             <div class="empty-state">
@@ -514,17 +519,19 @@ function displayAnnotations() {
         `;
         return;
     }
-    
+
     container.innerHTML = '';
-    
+
+    // Do NOT group variables; every annotation object is one row
     currentAnnotations.forEach((annotation, index) => {
         const item = createAnnotationItem(annotation, index);
         container.appendChild(item);
     });
-    
+
     // Setup drag and drop
     setupDragAndDrop();
 }
+
 
 // Create annotation item HTML
 function createAnnotationItem(annotation, index) {
@@ -533,44 +540,60 @@ function createAnnotationItem(annotation, index) {
     item.draggable = true;
     item.dataset.annotationId = annotation.id;
     item.dataset.index = index;
-    
+
     // Determine badge class and text based on type
-    let typeClass = 'annotation-type-form'; // Default to blue (variable)
+    let typeClass = 'annotation-type-variable'; // default for variables
     let typeText = 'Variable';
-    
+
     if (annotation.type === 'link') {
-        typeClass = 'annotation-type-link'; // Red for links
+        typeClass = 'annotation-type-link';
         typeText = 'Link';
     } else if (annotation.elementtype === 'bracketVariable') {
-        typeClass = 'annotation-type-bracket'; // Green for brackets
+        typeClass = 'annotation-type-bracket';
         typeText = 'Bracket';
     } else if (annotation.elementtype === 'textSelection' || annotation.inputtype === 'textSelection') {
-        // ⭐ NEW: Custom color for user-selected text
         typeClass = 'annotation-type-custom';
         typeText = 'Custom';
+    } else if (annotation.type === 'element' && annotation.inputtype && annotation.inputtype !== 'variable') {
+        // form fields etc.
+        typeClass = 'annotation-type-form';
+        typeText = 'Element';
     }
-    
+
     // Build details HTML
     let detailsHTML = '';
-    if (annotation.type === 'link' && annotation.url) {
-        detailsHTML = `<div><strong>URL:</strong> ${annotation.url}</div>`;
-    } else if (annotation.type === 'element') {
-        if (annotation.variablename) {
-            detailsHTML = `<div><strong>Variable:</strong> ${annotation.variablename}</div>`;
-        } else if (annotation.name) {
-            detailsHTML = `<div><strong>Name:</strong> ${annotation.name}</div>`;
+
+    if (annotation.type === 'link') {
+        if (annotation.url) {
+            detailsHTML += `<div><strong>URL:</strong> ${annotation.url}</div>`;
         }
+    } else if (annotation.type === 'element') {
+        if (annotation.variablename || annotation.variable_name) {
+            const varName = annotation.variablename || annotation.variable_name;
+            detailsHTML += `<div><strong>Variable:</strong> ${varName}</div>`;
+        } else if (annotation.name) {
+            detailsHTML += `<div><strong>Name:</strong> ${annotation.name}</div>`;
+        }
+
         if (annotation.inputtype) {
             detailsHTML += `<div><strong>Type:</strong> ${annotation.inputtype}</div>`;
         }
+
+        if (typeof annotation.occurrenceIndex === 'number') {
+            detailsHTML += `<div><strong>Occurrence:</strong> ${annotation.occurrenceIndex + 1}</div>`;
+        } else if (typeof annotation.occurrence_index === 'number') {
+            // from Python parser
+            detailsHTML += `<div><strong>Occurrence:</strong> ${annotation.occurrence_index + 1}</div>`;
+        }
     }
-    
-    // ⭐ NEW: Apply custom color inline if present
+
+    // NEW: Apply custom color inline for custom text selections
     let badgeStyle = '';
-    if (annotation.customColor && typeClass === 'annotation-type-custom') {
+    if (annotation.customColor) {
+        typeClass = 'annotation-type-custom';
         badgeStyle = `style="background-color: ${annotation.customColor};"`;
     }
-    
+
     item.innerHTML = `
         <div class="annotation-item-header">
             <span class="annotation-type-badge ${typeClass}" ${badgeStyle}>${typeText}</span>
@@ -583,14 +606,15 @@ function createAnnotationItem(annotation, index) {
                 </button>
             </div>
         </div>
-        <div class="annotation-label">${annotation.label}</div>
+        <div class="annotation-label">${annotation.label || 'Unnamed annotation'}</div>
         <div class="annotation-details">
             ${detailsHTML}
         </div>
     `;
-    
+
     return item;
 }
+
 
 
 // Setup drag and drop for reordering annotations
