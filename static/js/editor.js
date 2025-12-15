@@ -873,18 +873,6 @@ async function deleteAnnotation(annotationId) {
     }
 }
 
-// Toggle add modal fields based on type
-function toggleAddFields() {
-    const type = document.getElementById('addType').value;
-    
-    if (type === 'hyperlink') {
-        document.getElementById('addUrlGroup').style.display = 'block';
-        document.getElementById('addNameGroup').style.display = 'none';
-    } else {
-        document.getElementById('addUrlGroup').style.display = 'none';
-        document.getElementById('addNameGroup').style.display = 'block';
-    }
-}
 
 // Save new annotation
 async function saveNewAnnotation() {
