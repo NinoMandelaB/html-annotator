@@ -235,7 +235,7 @@ function applyVisualHighlights(iframeDoc) {
             if (selector.includes('linktext')) {
                 const match = selector.match(/:linktext\(\"(.+?)\"\)/);
                 if (match) {
-                    const linkText = match;
+                    const linkText = match[1];
                     const links = Array.from(iframeDoc.querySelectorAll('a'));
                     element = links.find(a => a.textContent.trim() === linkText.trim());
                 }
@@ -244,11 +244,9 @@ function applyVisualHighlights(iframeDoc) {
             else if (selector.includes('textvariable')) {
                 const match = selector.match(/:textvariable\(\"(.+?)\"\)/);
                 if (match) {
-                    const variableText = match;
-                    // THIS IS THE KEY FIX: Use occurrenceIndex from annotation
-                    const targetOccurrence = annotation.occurrenceIndex !== undefined ? annotation.occurrenceIndex : 0;
+                    const variableText = match[1];
 
-                    // Walk all text nodes and find ONLY the target occurrence
+                    // Walk all text nodes and wrap every occurrence of this variable
                     const walker = iframeDoc.createTreeWalker(
                         iframeDoc.body,
                         NodeFilter.SHOW_TEXT,
@@ -257,70 +255,69 @@ function applyVisualHighlights(iframeDoc) {
                     );
 
                     let node;
-                    let currentOccurrence = 0;
-                    let found = false;
+                    const nodesToProcess = [];
 
-                    while ((node = walker.nextNode()) && !found) {
+                    // First pass: collect nodes that contain the variable
+                    while ((node = walker.nextNode())) {
                         if (!node.textContent || !node.textContent.includes(variableText)) continue;
                         const parent = node.parentNode;
                         if (!parent) continue;
                         if (parent.nodeName === 'SCRIPT' || parent.nodeName === 'STYLE') continue;
 
-                        const text = node.textContent;
-                        const parts = text.split(variableText);
-                        if (parts.length <= 1) continue;
-
-                        // Count occurrences in this text node to find the right one
-                        let searchIndex = 0;
-                        for (let i = 0; i < parts.length - 1; i++) {
-                            if (currentOccurrence === targetOccurrence) {
-                                // Found the target occurrence - wrap it
-                                const beforePart = text.substring(0, text.indexOf(variableText, searchIndex));
-                                const matchStart = beforePart.length;
-                                const matchEnd = matchStart + variableText.length;
-
-                                const before = text.substring(0, matchStart);
-                                const match = text.substring(matchStart, matchEnd);
-                                const after = text.substring(matchEnd);
-
-                                const span = iframeDoc.createElement('span');
-                                const isBracketVariable = annotation.elementtype === 'bracketVariable';
-                                span.className = isBracketVariable
-                                    ? 'annotation-highlight-bracket'
-                                    : 'annotation-highlight-variable';
-                                span.setAttribute('data-annotation-id', annotation.id);
-                                span.textContent = match;
-
-                                const fragment = iframeDoc.createDocumentFragment();
-                                if (before) fragment.appendChild(iframeDoc.createTextNode(before));
-                                fragment.appendChild(span);
-                                if (after) fragment.appendChild(iframeDoc.createTextNode(after));
-
-                                parent.replaceChild(fragment, node);
-                                element = span;
-                                found = true;
-                                console.log(
-                                    'Wrapped',
-                                    annotation.variableName || annotation.name,
-                                    'occurrence',
-                                    currentOccurrence,
-                                    'with id',
-                                    annotation.id
-                                );
-                                break;
-                            }
-                            currentOccurrence++;
-                            searchIndex = text.indexOf(variableText, searchIndex) + variableText.length;
+                        // Don't process if parent is already a highlighted variable container
+                        if (!parent.classList || parent.classList.contains('annotation-highlight-variable') || parent.classList.contains('annotation-highlight-bracket')) {
+                            nodesToProcess.push(node);
+                        } else {
+                            nodesToProcess.push(node);
                         }
                     }
 
-                    if (!found) {
-                        console.warn(
-                            'Could not find occurrence',
-                            targetOccurrence,
-                            'of variable',
-                            variableText,
-                            'for annotation id',
+                    // Second pass: wrap all occurrences in each text node
+                    nodesToProcess.forEach(node => {
+                        const parent = node.parentNode;
+                        if (!parent) return;
+
+                        const text = node.textContent;
+                        if (!text || !text.includes(variableText)) return;
+
+                        const parts = text.split(variableText);
+                        if (parts.length <= 1) return;
+
+                        const fragment = iframeDoc.createDocumentFragment();
+
+                        const isBracketVariable = annotation.elementtype === 'bracketVariable';
+
+                        parts.forEach((part, index) => {
+                            // text before the variable
+                            if (part) {
+                                fragment.appendChild(iframeDoc.createTextNode(part));
+                            }
+
+                            // variable itself (not after the last part)
+                            if (index < parts.length - 1) {
+                                const span = iframeDoc.createElement('span');
+                                span.className = isBracketVariable
+                                    ? 'annotation-highlight-bracket'
+                                    : 'annotation-highlight-variable';
+                                // Use the unique annotation id for this occurrence
+                                span.setAttribute('data-annotation-id', annotation.id);
+                                span.textContent = variableText;
+                                fragment.appendChild(span);
+                            }
+                        });
+
+                        parent.replaceChild(fragment, node);
+                    });
+
+                    // For statistics / logging, grab one wrapped span
+                    element = iframeDoc.querySelector(`[data-annotation-id="${annotation.id}"]`);
+                    if (element) {
+                        console.log(
+                            'Wrapped variable',
+                            annotation.variableName || annotation.name,
+                            'as',
+                            annotation.elementtype,
+                            'with id',
                             annotation.id
                         );
                     }
@@ -330,7 +327,7 @@ function applyVisualHighlights(iframeDoc) {
             else if (selector.includes('textselection')) {
                 const match = selector.match(/:textselection\(\"(.+?)\"\)/);
                 if (match) {
-                    const selectedText = match;
+                    const selectedText = match[1];
                     const customColor = annotation.customColor || '#9b59b6';
                     const occurrenceIndex = annotation.occurrenceIndex || 0;
 
@@ -453,7 +450,6 @@ function applyVisualHighlights(iframeDoc) {
     console.log('  Not found:', notFoundCount);
     console.log('  Total annotations:', currentAnnotations.length);
 }
-
 
 
 
