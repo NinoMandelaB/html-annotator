@@ -121,20 +121,23 @@ function setupIframeInteraction() {
         }
     });
     
-    // Highlight annotation on hover
-    iframeDoc.addEventListener('mouseover', function(e) {
-        const annotationId = e.target.dataset.annotationId;
-        if (annotationId) {
-            highlightAnnotation(annotationId);
-        }
-    });
-    
-    iframeDoc.addEventListener('mouseout', function(e) {
-        const annotationId = e.target.dataset.annotationId;
-        if (annotationId) {
-            unhighlightAnnotation(annotationId);
-        }
-    });
+// Highlight annotation on hover
+iframeDoc.addEventListener('mouseover', function(e) {
+    const annotationId = e.target.dataset.annotationId;
+    const occurrenceIndex = e.target.dataset.occurrenceIndex;
+    if (annotationId !== undefined) {
+        highlightAnnotation(annotationId, occurrenceIndex);
+    }
+});
+
+iframeDoc.addEventListener('mouseout', function(e) {
+    const annotationId = e.target.dataset.annotationId;
+    const occurrenceIndex = e.target.dataset.occurrenceIndex;
+    if (annotationId !== undefined) {
+        unhighlightAnnotation(annotationId, occurrenceIndex);
+    }
+});
+
 }
 
 //Inject annotation CSS into iframe
@@ -221,7 +224,7 @@ function applyVisualHighlights(iframeDoc) {
     currentAnnotations.forEach(annotation => {
         const selector = annotation.selector;
 
-        // Skip annotations without selectors: these are text-level annotations
+        // Skip annotations without selectors
         if (!selector) {
             console.log('Skipped', annotation.label, '- no selector', annotation.elementtype);
             skippedCount++;
@@ -264,27 +267,26 @@ function applyVisualHighlights(iframeDoc) {
                         if (!parent) continue;
                         if (parent.nodeName === 'SCRIPT' || parent.nodeName === 'STYLE') continue;
 
-                        // Don't process if parent is already a highlighted variable container
-                        if (!parent.classList || parent.classList.contains('annotation-highlight-variable') || parent.classList.contains('annotation-highlight-bracket')) {
-                            nodesToProcess.push(node);
-                        } else {
-                            nodesToProcess.push(node);
-                        }
+                        nodesToProcess.push(node);
                     }
 
                     // Second pass: wrap all occurrences in each text node
-                    nodesToProcess.forEach(node => {
+                    // TRACK GLOBAL OCCURRENCE INDEX ACROSS ALL NODES
+                    let globalOccurrenceIndex = 0;
+                    let targetOccurrenceIndex = annotation.occurrenceIndex !== undefined ? annotation.occurrenceIndex : 0;
+
+                    for (let i = 0; i < nodesToProcess.length; i++) {
+                        const node = nodesToProcess[i];
                         const parent = node.parentNode;
-                        if (!parent) return;
+                        if (!parent) continue;
 
                         const text = node.textContent;
-                        if (!text || !text.includes(variableText)) return;
+                        if (!text || !text.includes(variableText)) continue;
 
                         const parts = text.split(variableText);
-                        if (parts.length <= 1) return;
+                        if (parts.length <= 1) continue;
 
                         const fragment = iframeDoc.createDocumentFragment();
-
                         const isBracketVariable = annotation.elementtype === 'bracketVariable';
 
                         parts.forEach((part, index) => {
@@ -295,19 +297,24 @@ function applyVisualHighlights(iframeDoc) {
 
                             // variable itself (not after the last part)
                             if (index < parts.length - 1) {
-                                const span = iframeDoc.createElement('span');
-                                span.className = isBracketVariable
-                                    ? 'annotation-highlight-bracket'
-                                    : 'annotation-highlight-variable';
-                                // Use the unique annotation id for this occurrence
-                                span.setAttribute('data-annotation-id', annotation.id);
-                                span.textContent = variableText;
-                                fragment.appendChild(span);
+                                // Check if this is the target occurrence for THIS annotation
+                                if (globalOccurrenceIndex === targetOccurrenceIndex) {
+                                    const span = iframeDoc.createElement('span');
+                                    span.className = isBracketVariable
+                                        ? 'annotation-highlight-bracket'
+                                        : 'annotation-highlight-variable';
+                                    // Store BOTH annotation id AND occurrence index
+                                    span.setAttribute('data-annotation-id', annotation.id);
+                                    span.setAttribute('data-occurrence-index', globalOccurrenceIndex);
+                                    span.textContent = variableText;
+                                    fragment.appendChild(span);
+                                }
+                                globalOccurrenceIndex++;
                             }
                         });
 
                         parent.replaceChild(fragment, node);
-                    });
+                    }
 
                     // For statistics / logging, grab one wrapped span
                     element = iframeDoc.querySelector(`[data-annotation-id="${annotation.id}"]`);
@@ -315,8 +322,8 @@ function applyVisualHighlights(iframeDoc) {
                         console.log(
                             'Wrapped variable',
                             annotation.variableName || annotation.name,
-                            'as',
-                            annotation.elementtype,
+                            'occurrence',
+                            targetOccurrenceIndex,
                             'with id',
                             annotation.id
                         );
@@ -366,6 +373,7 @@ function applyVisualHighlights(iframeDoc) {
                                 const span = iframeDoc.createElement('span');
                                 span.className = 'annotation-highlight-custom';
                                 span.setAttribute('data-annotation-id', annotation.id);
+                                span.setAttribute('data-occurrence-index', occurrenceIndex);
                                 span.textContent = matchText;
 
                                 const rgb = hexToRgb(customColor);
@@ -450,7 +458,6 @@ function applyVisualHighlights(iframeDoc) {
     console.log('  Not found:', notFoundCount);
     console.log('  Total annotations:', currentAnnotations.length);
 }
-
 
 
 // Handle element click in add mode
@@ -539,7 +546,9 @@ function createAnnotationItem(annotation, index) {
     item.className = 'annotation-item';
     item.draggable = true;
     item.dataset.annotationId = annotation.id;
+    item.dataset.occurrenceIndex = annotation.occurrenceIndex !== undefined ? annotation.occurrenceIndex : 0;
     item.dataset.index = index;
+
 
     // Determine badge class and text based on type
     let typeClass = 'annotation-type-variable'; // default for variables
@@ -959,13 +968,16 @@ async function saveAnnotations() {
     }
 }
 
-// Highlight annotation
-function highlightAnnotation(annotationId) {
-    const item = document.querySelector(`[data-annotation-id="${annotationId}"]`);
-    if (item) {
-        item.style.backgroundColor = '#fff3cd';
-    }
+// Unhighlight annotation
+function unhighlightAnnotation(annotationId, occurrenceIndex) {
+    const selector = occurrenceIndex !== undefined
+        ? `[data-annotation-id="${annotationId}"][data-occurrence-index="${occurrenceIndex}"]`
+        : `[data-annotation-id="${annotationId}"]`;
+    const item = document.querySelector(selector);
+    if (item) item.style.backgroundColor = '';
 }
+
+
 
 // Unhighlight annotation
 function unhighlightAnnotation(annotationId) {
