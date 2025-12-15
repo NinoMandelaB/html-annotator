@@ -876,19 +876,38 @@ async function deleteAnnotation(annotationId) {
 
 // Save new annotation
 async function saveNewAnnotation() {
-    const type = document.getElementById('addType').value;
-    const label = document.getElementById('addLabel').value;
-    const selector = document.getElementById('addSelector').value;
-    
-    // Get color field value - use default if field doesn't exist
-    const colorField = document.getElementById('addColor');
-    const customColor = colorField ? colorField.value : '#9b59b6';
-    
-    if (!label || !selector) {
-        alert('Please fill in all required fields');
-        return;
-    }
+  const type = document.getElementById('addType').value;
+  const label = document.getElementById('addLabel').value;
+  const selector = document.getElementById('addSelector').value;
+
+  const colorField = document.getElementById('addColor');
+  const customColor = colorField ? colorField.value : '#9b59b6';
+
+  if (!label || !selector) {
+    alert('Please fill in all required fields');
+    return;
+  }
+
+  const newAnnotation = {
+    id: Date.now().toString(),
+    type,
+    label,
+    selector,
+    customColor,
+    elementtype: 'textSelection',
+    inputtype: 'textSelection',
+    occurrenceIndex: currentTextSelection ? currentTextSelection.occurrenceIndex : 0
+  };
+
+  currentAnnotations.push(newAnnotation);
+  await saveAnnotations();
+  displayAnnotations();
+
+  const modalEl = document.getElementById('addModal');
+  const modal = bootstrap.Modal.getInstance(modalEl);
+  if (modal) modal.hide();
 }
+
 
 
 
