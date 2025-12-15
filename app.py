@@ -369,6 +369,220 @@ def generate_pdfs():
     files_data = session['files_data']
     
     try:
+        # Import the function from html_parser
+        from html_parser import create_annotation_overlays_for_pdf
+        
+        # Create a ZIP file in memory
+        zip_buffer = io.BytesIO()
+        
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED, False) as zip_file:
+            for file_data in files_data:
+                if file_data['id'] in selected_file_ids:
+                    try:
+                        print(f"📄 Processing '{file_data['filename']}' for PDF generation")
+                        
+                        # Use the specialized PDF overlay function
+                        # This creates a two-column layout with annotations sidebar
+                        html_with_overlays = create_annotation_overlays_for_pdf(
+                            file_data['html_content'],
+                            file_data['annotations']
+                        )
+                        
+                        # Parse the HTML with overlays
+                        soup = BeautifulSoup(html_with_overlays, 'html.parser')
+                        
+                        # Now apply inline highlights to the content area
+                        # Find the content area (first div in the container)
+                        content_area = soup.find('div', style=lambda s: s and 'flex: 1' in s)
+                        
+                        if content_area:
+                            # Apply highlights directly to the HTML in content area
+                            for annotation in file_data['annotations']:
+                                selector = annotation.get('selector', '')
+                                
+                                # Handle linktext: selectors using regex
+                                if ':linktext(' in selector:
+                                    match = re.search(r':linktext\(["\'](.+?)["\']\)', selector)
+                                    if match:
+                                        link_text = match.group(1)
+                                        for link in content_area.find_all('a'):
+                                            if link.get_text(strip=True) == link_text:
+                                                link['style'] = 'background-color: #ffebee; border: 1px solid #e74c3c; padding: 2px;'
+                                                print(f"  ✓ Highlighted link: {link_text}")
+                                
+                                # Handle textvariable: selectors using regex
+                                elif ':textvariable(' in selector:
+                                    match = re.search(r':textvariable\(["\'](.+?)["\']\)', selector)
+                                    if match:
+                                        variable_text = match.group(1)
+                                        element_type = annotation.get('element_type', 'hashVariable')
+                                        
+                                        # Choose color based on variable type
+                                        if element_type == 'bracketVariable':
+                                            bg_color = '#e8f5e9'
+                                            border_color = '#4caf50'
+                                        else:  # hashVariable
+                                            bg_color = '#e3f2fd'
+                                            border_color = '#2196f3'
+                                        
+                                        # Find and wrap all occurrences in content area only
+                                        wrap_text_in_element(content_area, soup, variable_text, bg_color, border_color)
+                                        print(f"  ✓ Highlighted variable: {variable_text}")
+                                
+                                # Handle textselection: custom highlights using regex
+                                elif ':textselection(' in selector:
+                                    match = re.search(r':textselection\(["\'](.+?)["\']\)', selector)
+                                    if match:
+                                        selected_text = match.group(1)
+                                        custom_color = annotation.get('customColor', '#9b59b6')
+                                        occurrence_index = annotation.get('occurrenceIndex', 0)
+                                        
+                                        # Wrap specific occurrence with custom color
+                                        wrap_text_occurrence_in_element(content_area, soup, selected_text, occurrence_index, custom_color)
+                                        print(f"  ✓ Highlighted text selection: {selected_text[:30]}...")
+                                
+                                # Handle regular CSS selectors
+                                elif selector:
+                                    try:
+                                        elements = content_area.select(selector)
+                                        if elements:
+                                            elements[0]['style'] = 'background-color: #e3f2fd; border: 1px solid #2196f3; padding: 2px;'
+                                            print(f"  ✓ Highlighted element: {selector}")
+                                    except Exception as selector_error:
+                                        print(f"  ⚠️ Could not apply selector: {selector} - {selector_error}")
+                        
+                        # Convert modified HTML to PDF
+                        modified_html = str(soup)
+                        pdf_bytes = convert_annotated_html_to_pdf(modified_html, [])
+                        
+                        # Create filename
+                        original_name = os.path.splitext(file_data['filename'])[0]
+                        pdf_filename = f"annotated_{original_name}.pdf"
+                        
+                        # Add to ZIP
+                        zip_file.writestr(pdf_filename, pdf_bytes)
+                        print(f"✅ Successfully added '{pdf_filename}' to ZIP")
+                    
+                    except Exception as file_error:
+                        # Log the error but continue processing other files
+                        print(f"❌ Error processing file '{file_data['filename']}': {str(file_error)}")
+                        import traceback
+                        traceback.print_exc()
+                        
+                        # Create an error file in the ZIP
+                        error_message = f"Error generating PDF for {file_data['filename']}:\n{str(file_error)}"
+                        error_filename = f"ERROR_{file_data['filename']}.txt"
+                        zip_file.writestr(error_filename, error_message)
+        
+        zip_buffer.seek(0)
+        return send_file(
+            zip_buffer,
+            as_attachment=True,
+            download_name='annotated_email_templates.zip',
+            mimetype='application/zip'
+        )
+    
+    except Exception as e:
+        print(f"❌ Error generating PDFs: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Error generating PDFs: {str(e)}'}), 500
+
+
+# Helper functions to wrap text within a specific element
+def wrap_text_in_element(container, soup, text_to_find, bg_color, border_color):
+    """Wrap all occurrences of text with styled span within a container element"""
+    for element in container.find_all(text=lambda t: t and text_to_find in str(t)):
+        if isinstance(element, NavigableString):
+            parent = element.parent
+            
+            if parent is None:
+                continue
+                
+            if parent.name in ['script', 'style']:
+                continue
+            
+            text = str(element)
+            if text_to_find not in text:
+                continue
+                
+            parts = text.split(text_to_find)
+            
+            if len(parts) <= 1:
+                continue
+                
+            parent.clear()
+            
+            for i, part in enumerate(parts):
+                if part:
+                    parent.append(NavigableString(part))
+                if i < len(parts) - 1:
+                    span = soup.new_tag('span')
+                    span['style'] = f'background-color: {bg_color}; border: 1px solid {border_color}; padding: 2px;'
+                    span.string = text_to_find
+                    parent.append(span)
+
+
+def wrap_text_occurrence_in_element(container, soup, text_to_find, occurrence_index, custom_color):
+    """Wrap a specific occurrence of text with custom color within a container element"""
+    current_occurrence = 0
+    
+    for element in container.find_all(text=lambda t: t and text_to_find in str(t)):
+        if isinstance(element, NavigableString):
+            parent = element.parent
+            
+            if parent is None:
+                continue
+                
+            if parent.name in ['script', 'style']:
+                continue
+            
+            text = str(element)
+            index = 0
+            
+            while index < len(text):
+                pos = text.find(text_to_find, index)
+                if pos == -1:
+                    break
+                
+                if current_occurrence == occurrence_index:
+                    before = text[:pos]
+                    match = text[pos:pos + len(text_to_find)]
+                    after = text[pos + len(text_to_find):]
+                    
+                    parent.clear()
+                    if before:
+                        parent.append(NavigableString(before))
+                    
+                    span = soup.new_tag('span')
+                    span['style'] = f'background-color: {custom_color}; border: 1px solid {custom_color}; padding: 2px; opacity: 0.6;'
+                    span.string = match
+                    parent.append(span)
+                    
+                    if after:
+                        parent.append(NavigableString(after))
+                    
+                    return
+                
+                current_occurrence += 1
+                index = pos + 1
+
+    """
+    Generate PDFs from selected files with their annotations.
+    Returns a ZIP file containing all annotated PDFs.
+    """
+    if 'files_data' not in session:
+        return jsonify({'error': 'No files to process'}), 404
+    
+    data = request.get_json()
+    selected_file_ids = data.get('selected_files', [])
+    
+    if not selected_file_ids:
+        return jsonify({'error': 'No files selected'}), 400
+    
+    files_data = session['files_data']
+    
+    try:
         # Create a ZIP file in memory
         zip_buffer = io.BytesIO()
         
