@@ -424,9 +424,22 @@ def create_annotation_overlays_for_pdf(html_content, annotations):
             margin_item.append(header_span)
             
             # Label
-            label_span = soup.new_tag('div', style='margin-top: 5px; font-weight: 600;')
-            label_span.string = annotation.get('label', 'Unnamed')
+            label_span = soup.new_tag("div", style="margin-top: 5px; font-weight: 600;")
+            label_span.string = annotation.get("label", "Unnamed")
             margin_item.append(label_span)
+
+            # Add comments if present
+            if annotation.get("comments") and annotation.get("comments").strip():
+                comments_span = soup.new_tag(
+                    "div",
+                    style=(
+                        "margin-top: 8px; padding: 8px; background-color: #f0f4f8; "
+                        "border-left: 3px solid #3498db; border-radius: 3px; "
+                        "font-size: 11px; color: #2c3e50; line-height: 1.4; font-style: italic;"
+                    ),
+                )
+                comments_span.string = annotation.get("comments")
+                margin_item.append(comments_span)
             
             # Additional details based on type
             if annotation.get('type') == 'link' and annotation.get('url'):
