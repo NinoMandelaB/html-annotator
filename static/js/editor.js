@@ -961,7 +961,6 @@ function highlightAnnotation(annotationId, occurrenceIndex) {
     }
 }
 
-
 // Unhighlight annotation
 function unhighlightAnnotation(annotationId, occurrenceIndex) {
     const selector = occurrenceIndex !== undefined
@@ -973,7 +972,6 @@ function unhighlightAnnotation(annotationId, occurrenceIndex) {
         item.style.borderColor = '';
     }
 }
-
 
 
 
