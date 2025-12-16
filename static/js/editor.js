@@ -627,88 +627,106 @@ function displayAnnotations() {
 
 // Create annotation item HTML
 function createAnnotationItem(annotation, index) {
-    const item = document.createElement('div');
-item.className = 'annotation-item';
-item.draggable = true;
-item.dataset.annotationId = annotation.id;
-item.dataset.occurrenceIndex = annotation.occurrenceIndex !== undefined ? annotation.occurrenceIndex : 0;
-item.dataset.index = index;
-
-
-
-    // Determine badge class and text based on type
-    let typeClass = 'annotation-type-variable'; // default for variables
-    let typeText = 'Variable';
-
-    if (annotation.type === 'link') {
-        typeClass = 'annotation-type-link';
-        typeText = 'Link';
-    } else if (annotation.elementtype === 'bracketVariable') {
-        typeClass = 'annotation-type-bracket';
-        typeText = 'Bracket';
-    } else if (annotation.elementtype === 'textSelection' || annotation.inputtype === 'textSelection') {
-        typeClass = 'annotation-type-custom';
-        typeText = 'Custom';
-    } else if (annotation.type === 'element' && annotation.inputtype && annotation.inputtype !== 'variable') {
-        // form fields etc.
-        typeClass = 'annotation-type-form';
-        typeText = 'Element';
-    }
-
-    // Build details HTML
-    let detailsHTML = '';
-
-    if (annotation.type === 'link') {
-        if (annotation.url) {
-            detailsHTML += `<div><strong>URL:</strong> ${annotation.url}</div>`;
-        }
-    } else if (annotation.type === 'element') {
-        if (annotation.variablename || annotation.variable_name) {
-            const varName = annotation.variablename || annotation.variable_name;
-            detailsHTML += `<div><strong>Variable:</strong> ${varName}</div>`;
-        } else if (annotation.name) {
-            detailsHTML += `<div><strong>Name:</strong> ${annotation.name}</div>`;
-        }
-
-        if (annotation.inputtype) {
-            detailsHTML += `<div><strong>Type:</strong> ${annotation.inputtype}</div>`;
-        }
-
-        if (typeof annotation.occurrenceIndex === 'number') {
-            detailsHTML += `<div><strong>Occurrence:</strong> ${annotation.occurrenceIndex + 1}</div>`;
-        } else if (typeof annotation.occurrence_index === 'number') {
-            // from Python parser
-            detailsHTML += `<div><strong>Occurrence:</strong> ${annotation.occurrence_index + 1}</div>`;
-        }
-    }
-
-    // NEW: Apply custom color inline for custom text selections
-    let badgeStyle = '';
-    if (annotation.customColor) {
-        typeClass = 'annotation-type-custom';
-        badgeStyle = `style="background-color: ${annotation.customColor};"`;
-    }
-
-    item.innerHTML = `
-        <div class="annotation-item-header">
-            <span class="annotation-type-badge ${typeClass}" ${badgeStyle}>${typeText}</span>
-            <div class="annotation-actions">
-                <button class="annotation-action-btn edit" onclick="editAnnotation('${annotation.id}')" title="Edit">
-                    <i class="fas fa-edit"></i>
-                </button>
-                <button class="annotation-action-btn delete" onclick="deleteAnnotation('${annotation.id}')" title="Delete">
-                    <i class="fas fa-trash"></i>
-                </button>
-            </div>
-        </div>
-        <div class="annotation-label">${annotation.label || 'Unnamed annotation'}</div>
-        <div class="annotation-details">
-            ${detailsHTML}
-        </div>
-    `;
-
-    return item;
+ const item = document.createElement('div');
+ item.className = 'annotation-item';
+ item.draggable = true;
+ item.dataset.annotationId = annotation.id;
+ item.dataset.occurrenceIndex = annotation.occurrenceIndex !== undefined ? annotation.occurrenceIndex : 0;
+ item.dataset.index = index;
+ 
+ // Determine badge class and text based on type
+ let typeClass = 'annotation-type-variable'; // default for variables
+ let typeText = 'Variable';
+ if (annotation.type === 'link') {
+   typeClass = 'annotation-type-link';
+   typeText = 'Link';
+ } else if (annotation.elementtype === 'bracketVariable') {
+   typeClass = 'annotation-type-bracket';
+   typeText = 'Bracket';
+ } else if (annotation.elementtype === 'textSelection' || annotation.inputtype === 'textSelection') {
+   typeClass = 'annotation-type-custom';
+   typeText = 'Custom';
+ } else if (annotation.type === 'element' && annotation.inputtype && annotation.inputtype !== 'variable') {
+   // form fields etc.
+   typeClass = 'annotation-type-form';
+   typeText = 'Element';
+ }
+ 
+ // Build details HTML
+ let detailsHTML = '';
+ if (annotation.type === 'link') {
+   if (annotation.url) {
+     detailsHTML += `<div><strong>URL:</strong> ${annotation.url}</div>`;
+   }
+ } else if (annotation.type === 'element') {
+   if (annotation.variablename || annotation.variable_name) {
+     const varName = annotation.variablename || annotation.variable_name;
+     detailsHTML += `<div><strong>Variable:</strong> ${varName}</div>`;
+   } else if (annotation.name) {
+     detailsHTML += `<div><strong>Name:</strong> ${annotation.name}</div>`;
+   }
+   if (annotation.inputtype) {
+     detailsHTML += `<div><strong>Type:</strong> ${annotation.inputtype}</div>`;
+   }
+   if (typeof annotation.occurrenceIndex === 'number') {
+     detailsHTML += `<div><strong>Occurrence:</strong> ${annotation.occurrenceIndex + 1}</div>`;
+   } else if (typeof annotation.occurrence_index === 'number') {
+     // from Python parser
+     detailsHTML += `<div><strong>Occurrence:</strong> ${annotation.occurrence_index + 1}</div>`;
+   }
+ }
+ 
+ // NEW: Add comments if present
+ let commentsHTML = '';
+ if (annotation.comments && annotation.comments.trim().length > 0) {
+   commentsHTML = `
+     <div class="annotation-comments" style="
+       margin-top: 8px;
+       padding: 8px;
+       background-color: #f0f4f8;
+       border-left: 3px solid #3498db;
+       border-radius: 3px;
+       font-size: 12px;
+       color: #2c3e50;
+       line-height: 1.4;
+       max-height: 60px;
+       overflow-y: auto;
+     ">
+       <strong style="display: block; margin-bottom: 4px; font-size: 11px; color: #7f8c8d; text-transform: uppercase;">Comments</strong>
+       <div style="white-space: pre-wrap; word-break: break-word;">${annotation.comments}</div>
+     </div>
+   `;
+ }
+ 
+ // NEW: Apply custom color inline for custom text selections
+ let badgeStyle = '';
+ if (annotation.customColor) {
+   typeClass = 'annotation-type-custom';
+   badgeStyle = `style="background-color: ${annotation.customColor};"`;
+ }
+ 
+ item.innerHTML = `
+   <div class="annotation-item-header">
+     <span class="annotation-type-badge ${typeClass}" ${badgeStyle}>${typeText}</span>
+     <div class="annotation-actions">
+       <button class="annotation-action-btn edit" onclick="editAnnotation('${annotation.id}')" title="Edit">
+         <i class="fas fa-edit"></i>
+       </button>
+       <button class="annotation-action-btn delete" onclick="deleteAnnotation('${annotation.id}')" title="Delete">
+         <i class="fas fa-trash"></i>
+       </button>
+     </div>
+   </div>
+   <div class="annotation-label">${annotation.label || 'Unnamed annotation'}</div>
+   <div class="annotation-details">
+     ${detailsHTML}
+   </div>
+   ${commentsHTML}
+ `;
+ 
+ return item;
 }
+
 
 
 
