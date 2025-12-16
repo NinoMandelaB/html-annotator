@@ -138,6 +138,7 @@ iframeDoc.addEventListener('mouseout', function(e) {
     }
 });
 
+
 }
 
 //Inject annotation CSS into iframe
@@ -543,11 +544,12 @@ function displayAnnotations() {
 // Create annotation item HTML
 function createAnnotationItem(annotation, index) {
     const item = document.createElement('div');
-    item.className = 'annotation-item';
-    item.draggable = true;
-    item.dataset.annotationId = annotation.id;
-    item.dataset.occurrenceIndex = annotation.occurrenceIndex !== undefined ? annotation.occurrenceIndex : 0;
-    item.dataset.index = index;
+item.className = 'annotation-item';
+item.draggable = true;
+item.dataset.annotationId = annotation.id;
+item.dataset.occurrenceIndex = annotation.occurrenceIndex !== undefined ? annotation.occurrenceIndex : 0;
+item.dataset.index = index;
+
 
 
     // Determine badge class and text based on type
@@ -953,8 +955,12 @@ function highlightAnnotation(annotationId, occurrenceIndex) {
         ? `[data-annotation-id="${annotationId}"][data-occurrence-index="${occurrenceIndex}"]`
         : `[data-annotation-id="${annotationId}"]`;
     const item = document.querySelector(selector);
-    if (item) item.style.backgroundColor = '#fff3cd';
+    if (item) {
+        item.style.backgroundColor = '#fff3cd';
+        item.style.borderColor = '#ffc107';
+    }
 }
+
 
 // Unhighlight annotation
 function unhighlightAnnotation(annotationId, occurrenceIndex) {
@@ -962,8 +968,12 @@ function unhighlightAnnotation(annotationId, occurrenceIndex) {
         ? `[data-annotation-id="${annotationId}"][data-occurrence-index="${occurrenceIndex}"]`
         : `[data-annotation-id="${annotationId}"]`;
     const item = document.querySelector(selector);
-    if (item) item.style.backgroundColor = '';
+    if (item) {
+        item.style.backgroundColor = '';
+        item.style.borderColor = '';
+    }
 }
+
 
 
 
