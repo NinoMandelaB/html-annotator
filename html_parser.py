@@ -12,18 +12,25 @@ import uuid
 def parse_html_and_detect_elements(html_content):
     """
     Parse HTML EMAIL TEMPLATE content and detect annotatable elements.
+    CRITICAL: Count text node occurrences only (not in HTML tags/attributes)
     """
     soup = BeautifulSoup(html_content, 'html.parser')
     annotations = []
     annotated_elements = set()
     
-    # Pattern 1: ##variableName## format
-    # CREATE ANNOTATION FOR EVERY INSTANCE with occurrence index
-    hash_variable_pattern = re.compile(r'##([^#]+)##')
-    hash_matches = hash_variable_pattern.finditer(str(soup))
-    instance_counter = {}  # Track instances for unique IDs
+    # Pattern 1: ##variableName## format (TEXT NODES ONLY)
+    # Extract all text content and count occurrences there
+    def count_text_occurrences(html_string):
+        """Count occurrences of patterns in text nodes only, not HTML tags"""
+        # Remove all HTML tags to get clean text
+        clean_text = re.sub(r'<[^>]+>', '', html_string)
+        return clean_text
     
-    for match in hash_matches:
+    clean_text_content = count_text_occurrences(str(soup))
+    hash_variable_pattern = re.compile(r'##([^#]+)##')
+    instance_counter = {}
+    
+    for match in hash_variable_pattern.finditer(clean_text_content):
         var_content = match.group(1)
         full_text = match.group(0)  # ##variableName##
         
@@ -38,25 +45,30 @@ def parse_html_and_detect_elements(html_content):
         annotation = {
             "id": str(uuid.uuid4()),
             "type": "element",
+            "elementtype": "hashVariable",
             "element_type": "hashVariable",
+            "inputtype": "variable",
             "input_type": "variable",
             "selector": f':textvariable("{full_text}")',
-            "occurrence_index": occurrence_index,  # ADD THIS
+            "occurrenceIndex": occurrence_index,
+            "occurrence_index": occurrence_index,
             "name": var_content,
             "element_id": "",
-            "label": f"Variable: {var_content} (occurrence {occurrence_index + 1})",  # UPDATE LABEL
+            "label": f"Variable: {var_content} (occurrence {occurrence_index + 1})",
             "text": full_text,
             "variable_name": var_content,
+            "variableName": var_content,
             "url": None,
             "comments": ""
         }
         
         annotations.append(annotation)
     
-    # Pattern 2: [text] format (square brackets)
+    # Pattern 2: [text] format (square brackets - TEXT NODES ONLY)
     html_without_comments = re.sub(r'<!--.*?-->', '', str(soup), flags=re.DOTALL)
+    clean_bracket_text = count_text_occurrences(html_without_comments)
     bracket_pattern = re.compile(r'\[([^\]]+)\]')
-    bracket_matches = bracket_pattern.finditer(html_without_comments)
+    bracket_matches = bracket_pattern.finditer(clean_bracket_text)
     bracket_counter = {}
     
     for match in bracket_matches:
@@ -84,15 +96,19 @@ def parse_html_and_detect_elements(html_content):
         annotation = {
             "id": str(uuid.uuid4()),
             "type": "element",
+            "elementtype": "bracketVariable",
             "element_type": "bracketVariable",
+            "inputtype": "variable",
             "input_type": "variable",
             "selector": f':textvariable("{full_text}")',
-            "occurrence_index": occurrence_index,  # ADD THIS
+            "occurrenceIndex": occurrence_index,
+            "occurrence_index": occurrence_index,
             "name": bracket_content,
             "element_id": "",
-            "label": f"Placeholder: {bracket_content} (occurrence {occurrence_index + 1})",  # UPDATE LABEL
+            "label": f"Placeholder: {bracket_content} (occurrence {occurrence_index + 1})",
             "text": full_text,
             "variable_name": bracket_content,
+            "variableName": bracket_content,
             "url": None,
             "comments": ""
         }
@@ -130,7 +146,9 @@ def parse_html_and_detect_elements(html_content):
         annotation = {
             "id": str(uuid.uuid4()),
             "type": "link",
+            "elementtype": "a",
             "element_type": "a",
+            "inputtype": "email" if is_email else "url",
             "input_type": "email" if is_email else "url",
             "selector": selector,
             "name": link_text or href,
@@ -146,6 +164,7 @@ def parse_html_and_detect_elements(html_content):
         annotations.append(annotation)
     
     return annotations
+
 
 
 
