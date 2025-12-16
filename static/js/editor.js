@@ -259,6 +259,13 @@ function applyVisualHighlights(iframeDoc) {
            ? annotation.occurrenceIndex 
            : 0;
          
+         // Helper: normalize whitespace for comparison
+         const normalizeWhitespace = (text) => {
+           return text.replace(/\s+/g, ' ').trim();
+         };
+         
+         const normalizedVariableText = normalizeWhitespace(variableText);
+         
          // FIRST PASS: Collect all occurrences with their locations
          const occurrences = [];
          const walker = iframeDoc.createTreeWalker(
@@ -272,28 +279,56 @@ function applyVisualHighlights(iframeDoc) {
          let globalOccurrenceCount = 0;
          
          while ((node = walker.nextNode())) {
-           if (!node.textContent || !node.textContent.includes(variableText)) continue;
+           if (!node.textContent || !node.textContent.includes(variableText.substring(0, 5))) continue;
            
            const parent = node.parentNode;
            if (!parent || parent.nodeName === 'SCRIPT' || parent.nodeName === 'STYLE') continue;
            
            const text = node.textContent;
-           let searchPos = 0;
            
-           // Find each occurrence in this node
-           while (searchPos < text.length) {
-             const index = text.indexOf(variableText, searchPos);
-             if (index === -1) break;
+           // For bracket variables, try normalized matching
+           if (variableText.includes('[')) {
+             const normalizedText = normalizeWhitespace(text);
+             let searchPos = 0;
              
-             occurrences.push({
-               node: node,
-               parent: parent,
-               index: index,
-               occurrenceIndex: globalOccurrenceCount
-             });
+             while (searchPos < normalizedText.length) {
+               const index = normalizedText.indexOf(normalizedVariableText, searchPos);
+               if (index === -1) break;
+               
+               occurrences.push({
+                 node: node,
+                 parent: parent,
+                 text: text,
+                 normalizedIndex: index,
+                 normalizedLength: normalizedVariableText.length,
+                 occurrenceIndex: globalOccurrenceCount,
+                 isNormalized: true
+               });
+               
+               globalOccurrenceCount++;
+               searchPos = index + normalizedVariableText.length;
+             }
+           } else {
+             // For other variables, use exact matching
+             let searchPos = 0;
              
-             globalOccurrenceCount++;
-             searchPos = index + variableText.length;
+             while (searchPos < text.length) {
+               const index = text.indexOf(variableText, searchPos);
+               if (index === -1) break;
+               
+               occurrences.push({
+                 node: node,
+                 parent: parent,
+                 text: text,
+                 exactIndex: index,
+                 exactLength: variableText.length,
+                 occurrenceIndex: globalOccurrenceCount,
+                 isNormalized: false
+               });
+               
+               globalOccurrenceCount++;
+               searchPos = index + variableText.length;
+             }
            }
          }
          
@@ -303,38 +338,62 @@ function applyVisualHighlights(iframeDoc) {
          const targetOccurrence = occurrences.find(occ => occ.occurrenceIndex === targetOccurrenceIndex);
          
          if (targetOccurrence) {
-           const { node, parent, index, occurrenceIndex } = targetOccurrence;
-           const text = node.textContent;
+           const { node, parent, text } = targetOccurrence;
            
-           const before = text.substring(0, index);
-           const varText = text.substring(index, index + variableText.length);
-           const after = text.substring(index + variableText.length);
+           // If normalized, we need to find the actual character positions in the original text
+           let index, length;
+           if (targetOccurrence.isNormalized) {
+             // For normalized matches, find the substring in the original
+             // This is approximate - we search for key parts of the variable
+             const firstPart = variableText.substring(0, Math.min(10, variableText.length));
+             index = text.indexOf(firstPart);
+             length = variableText.length;
+             
+             if (index === -1) {
+               // Fallback: try to find any part
+               const cleanedText = normalizeWhitespace(text);
+               index = cleanedText.indexOf(normalizedVariableText);
+               if (index !== -1) {
+                 // Map back to original text (this is approximate)
+                 length = variableText.length;
+               }
+             }
+           } else {
+             index = targetOccurrence.exactIndex;
+             length = targetOccurrence.exactLength;
+           }
            
-           const span = iframeDoc.createElement('span');
-           const isBracketVariable = annotation.elementtype === 'bracketVariable';
-           span.className = isBracketVariable 
-             ? 'annotation-highlight-bracket'
-             : 'annotation-highlight-variable';
-           span.setAttribute('data-annotation-id', annotation.id);
-           span.setAttribute('data-occurrence-index', occurrenceIndex);
-           span.textContent = varText;
-           
-           const fragment = iframeDoc.createDocumentFragment();
-           if (before) fragment.appendChild(iframeDoc.createTextNode(before));
-           fragment.appendChild(span);
-           if (after) fragment.appendChild(iframeDoc.createTextNode(after));
-           
-           parent.replaceChild(fragment, node);
-           element = span;
-           
-           console.log(
-             'Wrapped variable',
-             annotation.variableName || annotation.name,
-             'occurrence',
-             occurrenceIndex,
-             'with id',
-             annotation.id
-           );
+           if (index !== -1 && index !== undefined) {
+             const before = text.substring(0, index);
+             const varText = text.substring(index, index + length);
+             const after = text.substring(index + length);
+             
+             const span = iframeDoc.createElement('span');
+             const isBracketVariable = annotation.elementtype === 'bracketVariable';
+             span.className = isBracketVariable 
+               ? 'annotation-highlight-bracket'
+               : 'annotation-highlight-variable';
+             span.setAttribute('data-annotation-id', annotation.id);
+             span.setAttribute('data-occurrence-index', targetOccurrence.occurrenceIndex);
+             span.textContent = varText;
+             
+             const fragment = iframeDoc.createDocumentFragment();
+             if (before) fragment.appendChild(iframeDoc.createTextNode(before));
+             fragment.appendChild(span);
+             if (after) fragment.appendChild(iframeDoc.createTextNode(after));
+             
+             parent.replaceChild(fragment, node);
+             element = span;
+             
+             console.log(
+               'Wrapped variable',
+               annotation.variableName || annotation.name,
+               'occurrence',
+               targetOccurrence.occurrenceIndex,
+               'with id',
+               annotation.id
+             );
+           }
          } else {
            console.warn(
              'Could not find occurrence',
@@ -482,6 +541,7 @@ function applyVisualHighlights(iframeDoc) {
  console.log(' Not found:', notFoundCount);
  console.log(' Total annotations:', currentAnnotations.length);
 }
+
 
 
 
