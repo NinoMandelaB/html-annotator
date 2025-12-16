@@ -220,6 +220,7 @@ function applyVisualHighlights(iframeDoc) {
  let skippedCount = 0;
  let notFoundCount = 0;
  console.log('Attempting to highlight', currentAnnotations.length, 'annotations...');
+ 
  currentAnnotations.forEach(annotation => {
    const selector = annotation.selector;
    // Skip annotations without selectors
@@ -230,6 +231,7 @@ function applyVisualHighlights(iframeDoc) {
    }
    try {
      let element = null;
+     
      // Custom selector: linktext("...")
      if (selector.includes('linktext')) {
        const match = selector.match(/:linktext\(\"(.+?)\"\)/);
@@ -256,70 +258,92 @@ function applyVisualHighlights(iframeDoc) {
          const targetOccurrenceIndex = annotation.occurrenceIndex !== undefined 
            ? annotation.occurrenceIndex 
            : 0;
-         // Create a global counter to track ALL occurrences across ALL nodes
-         let globalOccurrenceCount = 0;
-         let foundAndWrapped = false;
+         
+         // FIRST PASS: Collect all occurrences with their locations
+         const occurrences = [];
          const walker = iframeDoc.createTreeWalker(
            iframeDoc.body,
            NodeFilter.SHOW_TEXT,
            null,
            false
          );
+         
          let node;
-         while ((node = walker.nextNode()) && !foundAndWrapped) {
+         let globalOccurrenceCount = 0;
+         
+         while ((node = walker.nextNode())) {
            if (!node.textContent || !node.textContent.includes(variableText)) continue;
            
            const parent = node.parentNode;
            if (!parent || parent.nodeName === 'SCRIPT' || parent.nodeName === 'STYLE') continue;
+           
            const text = node.textContent;
            let searchPos = 0;
+           
            // Find each occurrence in this node
-           while (searchPos < text.length && !foundAndWrapped) {
+           while (searchPos < text.length) {
              const index = text.indexOf(variableText, searchPos);
              if (index === -1) break;
-             // Check if this is the target occurrence
-             if (globalOccurrenceCount === targetOccurrenceIndex) {
-               // WRAP ONLY THIS ONE
-               const before = text.substring(0, index);
-               const varText = text.substring(index, index + variableText.length);
-               const after = text.substring(index + variableText.length);
-               const span = iframeDoc.createElement('span');
-               const isBracketVariable = annotation.elementtype === 'bracketVariable';
-               span.className = isBracketVariable 
-                 ? 'annotation-highlight-bracket'
-                 : 'annotation-highlight-variable';
-               span.setAttribute('data-annotation-id', annotation.id);
-               span.setAttribute('data-occurrence-index', globalOccurrenceCount);
-               span.textContent = varText;
-               const fragment = iframeDoc.createDocumentFragment();
-               if (before) fragment.appendChild(iframeDoc.createTextNode(before));
-               fragment.appendChild(span);
-               if (after) fragment.appendChild(iframeDoc.createTextNode(after));
-               parent.replaceChild(fragment, node);
-               foundAndWrapped = true;
-               element = span;
-               console.log(
-                 'Wrapped variable',
-                 annotation.variableName || annotation.name,
-                 'occurrence',
-                 targetOccurrenceIndex,
-                 'with id',
-                 annotation.id
-               );
-               break;
-             }
+             
+             occurrences.push({
+               node: node,
+               parent: parent,
+               index: index,
+               occurrenceIndex: globalOccurrenceCount
+             });
+             
              globalOccurrenceCount++;
              searchPos = index + variableText.length;
            }
          }
-         if (!foundAndWrapped) {
+         
+         console.log(`Found ${occurrences.length} total occurrences of "${variableText}". Looking for occurrence #${targetOccurrenceIndex}`);
+         
+         // SECOND PASS: Find and wrap the specific target occurrence
+         const targetOccurrence = occurrences.find(occ => occ.occurrenceIndex === targetOccurrenceIndex);
+         
+         if (targetOccurrence) {
+           const { node, parent, index, occurrenceIndex } = targetOccurrence;
+           const text = node.textContent;
+           
+           const before = text.substring(0, index);
+           const varText = text.substring(index, index + variableText.length);
+           const after = text.substring(index + variableText.length);
+           
+           const span = iframeDoc.createElement('span');
+           const isBracketVariable = annotation.elementtype === 'bracketVariable';
+           span.className = isBracketVariable 
+             ? 'annotation-highlight-bracket'
+             : 'annotation-highlight-variable';
+           span.setAttribute('data-annotation-id', annotation.id);
+           span.setAttribute('data-occurrence-index', occurrenceIndex);
+           span.textContent = varText;
+           
+           const fragment = iframeDoc.createDocumentFragment();
+           if (before) fragment.appendChild(iframeDoc.createTextNode(before));
+           fragment.appendChild(span);
+           if (after) fragment.appendChild(iframeDoc.createTextNode(after));
+           
+           parent.replaceChild(fragment, node);
+           element = span;
+           
+           console.log(
+             'Wrapped variable',
+             annotation.variableName || annotation.name,
+             'occurrence',
+             occurrenceIndex,
+             'with id',
+             annotation.id
+           );
+         } else {
            console.warn(
              'Could not find occurrence',
              targetOccurrenceIndex,
              'of variable',
              variableText,
              'for annotation id',
-             annotation.id
+             annotation.id,
+             `(only found ${occurrences.length} occurrences)`
            );
          }
        }
@@ -331,65 +355,86 @@ function applyVisualHighlights(iframeDoc) {
          const selectedText = match[1];
          const customColor = annotation.customColor || '#9b59b6';
          const occurrenceIndex = annotation.occurrenceIndex || 0;
+         
+         // FIRST PASS: Collect all occurrences
+         const occurrences = [];
          const walker = iframeDoc.createTreeWalker(
            iframeDoc.body,
            NodeFilter.SHOW_TEXT,
            null,
            false
          );
+         
          let node;
          let currentOccurrence = 0;
-         let found = false;
+         
          while ((node = walker.nextNode())) {
-           if (found) break;
            const text = node.textContent;
            if (!text || !text.includes(selectedText)) continue;
+           
            let searchIndex = 0;
            while (searchIndex < text.length) {
              const index = text.indexOf(selectedText, searchIndex);
              if (index === -1) break;
-             if (currentOccurrence === occurrenceIndex) {
-               const parent = node.parentNode;
-               if (!parent || parent.nodeName === 'SCRIPT' || parent.nodeName === 'STYLE') {
-                 searchIndex = index + 1;
-                 continue;
-               }
-               const before = text.substring(0, index);
-               const matchText = text.substring(index, index + selectedText.length);
-               const after = text.substring(index + selectedText.length);
-               const span = iframeDoc.createElement('span');
-               span.className = 'annotation-highlight-custom';
-               span.setAttribute('data-annotation-id', annotation.id);
-               span.setAttribute('data-occurrence-index', occurrenceIndex);
-               span.textContent = matchText;
-               const rgb = hexToRgb(customColor);
-               span.style.cssText = `
-                 outline: 3px solid ${customColor} !important;
-                 outline-offset: 2px !important;
-                 box-shadow: 0 0 10px rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.5) !important;
-                 background-color: rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.15) !important;
-                 position: relative !important;
-                 display: inline !important;
-                 padding: 2px 4px !important;
-                 border-radius: 3px !important;
-                 cursor: pointer;
-               `;
-               const beforeNode = iframeDoc.createTextNode(before);
-               const afterNode = iframeDoc.createTextNode(after);
-               parent.insertBefore(beforeNode, node);
-               parent.insertBefore(span, node);
-               parent.insertBefore(afterNode, node);
-               parent.removeChild(node);
-               element = span;
-               found = true;
-               console.log('Highlighted occurrence', occurrenceIndex, 'of selected text');
-               break;
+             
+             const parent = node.parentNode;
+             if (!parent || parent.nodeName === 'SCRIPT' || parent.nodeName === 'STYLE') {
+               searchIndex = index + 1;
+               continue;
              }
+             
+             occurrences.push({
+               node: node,
+               parent: parent,
+               index: index,
+               occurrenceNum: currentOccurrence
+             });
+             
              currentOccurrence++;
              searchIndex = index + 1;
            }
          }
-         if (!found) {
+         
+         // SECOND PASS: Find and wrap the specific target occurrence
+         const targetOccurrence = occurrences.find(occ => occ.occurrenceNum === occurrenceIndex);
+         
+         if (targetOccurrence) {
+           const { node, parent, index } = targetOccurrence;
+           const text = node.textContent;
+           
+           const before = text.substring(0, index);
+           const matchText = text.substring(index, index + selectedText.length);
+           const after = text.substring(index + selectedText.length);
+           
+           const span = iframeDoc.createElement('span');
+           span.className = 'annotation-highlight-custom';
+           span.setAttribute('data-annotation-id', annotation.id);
+           span.setAttribute('data-occurrence-index', occurrenceIndex);
+           span.textContent = matchText;
+           
+           const rgb = hexToRgb(customColor);
+           span.style.cssText = `
+             outline: 3px solid ${customColor} !important;
+             outline-offset: 2px !important;
+             box-shadow: 0 0 10px rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.5) !important;
+             background-color: rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.15) !important;
+             position: relative !important;
+             display: inline !important;
+             padding: 2px 4px !important;
+             border-radius: 3px !important;
+             cursor: pointer;
+           `;
+           
+           const beforeNode = iframeDoc.createTextNode(before);
+           const afterNode = iframeDoc.createTextNode(after);
+           parent.insertBefore(beforeNode, node);
+           parent.insertBefore(span, node);
+           parent.insertBefore(afterNode, node);
+           parent.removeChild(node);
+           
+           element = span;
+           console.log('Highlighted occurrence', occurrenceIndex, 'of selected text');
+         } else {
            console.warn(
              'Could not find occurrence',
              occurrenceIndex,
@@ -420,6 +465,7 @@ function applyVisualHighlights(iframeDoc) {
          }
        }
      }
+     
      if (element) {
        highlightedCount++;
      } else {
@@ -429,12 +475,14 @@ function applyVisualHighlights(iframeDoc) {
      console.error('Error highlighting selector', annotation.selector, error);
    }
  });
+ 
  console.log('Highlighting Summary');
  console.log(' Highlighted:', highlightedCount);
  console.log(' Skipped (no selector):', skippedCount);
  console.log(' Not found:', notFoundCount);
  console.log(' Total annotations:', currentAnnotations.length);
 }
+
 
 
 // Handle element click in add mode
